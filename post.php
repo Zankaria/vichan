@@ -4,6 +4,8 @@
  */
 
 require_once 'inc/bootstrap.php';
+require_once 'inc/captcha_verify.php';
+require_once 'inc/adapters/curl.php';
 
 /**
  * Utility functions
@@ -62,35 +64,6 @@ function strip_symbols($input) {
 }
 
 /**
- * Download the url's target with curl.
- *
- * @param string $url Url to the file to download.
- * @param int $timeout Request timeout in seconds.
- * @param File $fd File descriptor to save the content to.
- * @return null|string Returns a string on error.
- */
-function download_file_into($url, $timeout, $fd) {
-	$err = null;
-	$curl = curl_init();
-	curl_setopt($curl, CURLOPT_URL, $url);
-	curl_setopt($curl, CURLOPT_FAILONERROR, true);
-	curl_setopt($curl, CURLOPT_FOLLOWLOCATION, false);
-	curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, 5);
-	curl_setopt($curl, CURLOPT_TIMEOUT, $timeout);
-	curl_setopt($curl, CURLOPT_USERAGENT, 'Tinyboard');
-	curl_setopt($curl, CURLOPT_FILE, $fd);
-	curl_setopt($curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-	curl_setopt($curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-
-	if (curl_exec($curl) === false) {
-		$err = curl_error($curl);
-	}
-
-	curl_close($curl);
-	return $err;
-}
-
-/**
  * Download a remote file from the given url.
  * The file is deleted at shutdown.
  *
@@ -127,11 +100,10 @@ function download_file_from_url($file_url, $request_timeout, $allowed_extensions
 	register_shutdown_function('unlink_tmp_file', $tmp_file);
 
 	$fd = fopen($tmp_file, 'w');
-
-	$dl_err = download_file_into($tmp_file, $request_timeout, $fd);
-	fclose($fd);
-	if ($dl_err !== null) {
-		throw new Exception($error_array['nomove'] . '<br/>Curl says: ' . $dl_err);
+	try {
+		Curl::self()->download_into($tmp_file, $request_timeout, $fd);
+	} finally {
+		fclose($fd);
 	}
 
 	return array(
@@ -141,6 +113,73 @@ function download_file_from_url($file_url, $request_timeout, $allowed_extensions
 		'error' => 0,
 		'size' => filesize($tmp_file)
 	);
+}
+
+/**
+ * Handle the captcha on posting.
+ *
+ * @param array $config Global configuration.
+ * @param bool $is_op If the request is an attempt to open a new thread.
+ *
+ * @throws Exception Throws on error.
+ */
+function post_verify_captcha($config, $is_op) {
+	// Check for CAPTCHA right after opening the board so the "return" link is in there.
+	if ($config['recaptcha']) {
+		if (!isset($_POST['g-recaptcha-response'])) {
+			throw new Exception($config['error']['bot']);
+		}
+
+		$success = CaptchaVerify::with_recaptcha(
+			Curl::self(),
+			$config['recaptcha_private'],
+			$_POST['g-recaptcha-response'],
+			$_SERVER['REMOTE_ADDR']
+		);
+
+		// Check what reCAPTCHA has to say...
+		if (!$success) {
+			throw new Exception($config['error']['captcha']);
+		}
+	}
+	// hCaptcha
+	if ($config['hcaptcha']) {
+		if (!isset($_POST['h-captcha-response'])) {
+			throw new Exception($config['error']['bot']);
+		}
+
+		$success = CaptchaVerify::with_hcaptcha(
+			Curl::self(),
+			$config['hcaptcha_private'],
+			$_POST['h-captcha-response'],
+			$_SERVER['REMOTE_ADDR'],
+			'https://hcaptcha.com/siteverify'
+		);
+
+		if (!$success) {
+			throw new Exception($config['error']['captcha']);
+		}
+	}
+
+	// Same, but now with our custom captcha provider
+	if ($config['captcha']['enabled'] || ($is_op && $config['new_thread_capt'])) {
+		$success = CaptchaVerify::with_native(
+			Curl::self(),
+			$config['domain'],
+			$config['captcha']['provider_check'],
+			$config['captcha']['extra'],
+			$_POST['captcha_text'],
+			$_POST['captcha_cookie']
+		);
+
+		if (!$success) {
+			// What the hell
+			$err = $config['error']['captcha']
+				. '<script>if (actually_load_captcha !== undefined) actually_load_captcha("'
+				. $config['captcha']['provider_get'] . '", "' . $config['captcha']['extra'].'");</script>';
+			throw new Exception($err);
+		}
+	}
 }
 
 /**
@@ -449,17 +488,20 @@ if (isset($_POST['delete'])) {
 	}
 
 	if ($config['report_captcha']) {
-		$ch = curl_init($config['domain'].'/'.$config['captcha']['provider_check'] . "?" . http_build_query([
-			'mode' => 'check',
-			'text' => $_POST['captcha_text'],
-			'extra' => $config['captcha']['extra'],
-			'cookie' => $_POST['captcha_cookie']
-		]));
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-		$resp = curl_exec($ch);
+		try {
+			$success = CaptchaVerify::get()->with_native(
+				$config['domain'],
+				$config['captcha']['provider_check'],
+				$config['captcha']['extra'],
+				$_POST['captcha_text'],
+				$_POST['captcha_cookie']
+			);
 
-		if ($resp !== '1') {
-			error($config['error']['captcha']);
+			if (!$success) {
+				error($config['error']['captcha']);
+			}
+		} catch(Exception $e) {
+			error($e->getMessage());
 		}
 	}
 
