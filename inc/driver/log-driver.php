@@ -132,6 +132,7 @@ interface Log {
 	public const INFO = LOG_INFO;
 	public const DEBUG = LOG_DEBUG;
 
+
 	/**
 	 * Log a message if the level of irrelevancy is bellow the maximum.
 	 *
