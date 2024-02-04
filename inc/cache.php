@@ -6,8 +6,13 @@
 
 defined('TINYBOARD') or exit;
 
+require_once('inc/data/driver/cache-driver.php');
+require_once('inc/data/twig-cache.php');
+
+
 class Cache {
 	private static $cache;
+
 	public static function init() {
 		global $config;
 
@@ -29,6 +34,7 @@ class Cache {
 				break;
 		}
 	}
+
 	public static function get($key) {
 		global $config, $debug;
 
@@ -70,6 +76,7 @@ class Cache {
 
 		return $data;
 	}
+
 	public static function set($key, $value, $expires = false) {
 		global $config, $debug;
 
@@ -102,9 +109,11 @@ class Cache {
 				break;
 		}
 
-		if ($config['debug'])
+		if ($config['debug']) {
 			$debug['cached'][] = $key . ' (set)';
+		}
 	}
+
 	public static function delete($key) {
 		global $config, $debug;
 
