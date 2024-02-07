@@ -19,12 +19,42 @@ class DnsQueries {
 	private $exceptions;
 
 
-	private static function reverse_ip_octets($ip) {
+	private static function reverse_ipv4_octets($ip) {
 		return implode('.', array_reverse(explode('.', $ip)));
 	}
 
-	private static function is_ipv6($ip) {
-		return strstr($ip, ':') !== false;
+	private static function reverse_ipv6_octets($ip) {
+		return strrev(implode(".", str_split(str_replace(':', '', $ip))));
+	}
+
+	private static function is_ipv4($ip) {
+		return strpos($ip, ':') === false;
+	}
+
+	/**
+	 * Expands any IP type. Does NOT perform input validation.
+	 * Adapted from: https://stackoverflow.com/a/58577916
+	 *
+	 * The ip is expanded inplace due to a PHP limitation of being unable to return multiple values.
+	 * @param string $ip
+	 * @return bool Returns if the address is an IPv6 address.
+	 */
+	private static function expand_ip_inplace(&$ip) {
+		if (self::is_ipv4($ip)) {
+			return false;
+		}
+
+		// Assume IPv6
+		$hex = bin2hex(inet_pton($ip));
+
+		if (str_starts_with($hex, '00000000000000000000ffff')) {
+			$ip = long2ip(hexdec(substr($hex, -8)));
+			return true;
+		} else {
+			// IPv4-mapped IPv6 addresses
+			$ip = implode(':', str_split($hex, 4));
+			return false;
+		}
 	}
 
 	/**
@@ -68,13 +98,11 @@ class DnsQueries {
 	 * Is the given IP known to a blacklist?
 	 * Documentation: https://github.com/vichan-devel/vichan/wiki/dnsbl
 	 *
-	 * @param string $ip The ip to lookup.
+	 * @param string $ip The ip to lookup. The ip is NOT validated.
 	 * @return bool Returns true if the IP is a in known blacklist.
 	 */
 	public function is_spam_ip($ip) {
-		if (self::is_ipv6($ip)) {
-			return false;
-		}
+		$is_ipv6 = self::expand_ip_inplace($ip);
 
 		if (in_array($ip, $this->exceptions)) {
 			return false;
@@ -85,7 +113,11 @@ class DnsQueries {
 			return false;
 		}
 
-		$ip = self::reverse_ip_octets($ip);
+		if ($is_ipv6) {
+			$ip = self::reverse_ipv6_octets($ip);
+		} else {
+			$ip = self::reverse_ipv4_octets($ip);
+		}
 
 		foreach ($this->blacklist_providers as $blacklist) {
 			$blacklist_host = $blacklist;
