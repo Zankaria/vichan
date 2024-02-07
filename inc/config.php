@@ -85,9 +85,6 @@
 	// Requires safe_mode to be disabled.
 	$config['dns_system'] = false;
 
-	// Check validity of the reverse DNS of IP addresses. Highly recommended.
-	$config['fcrdns'] = true;
-
 	// When executing most command-line tools (such as `convert` for ImageMagick image processing), add this
 	// to the environment path (seperated by :).
 	$config['shell_path'] = '/usr/local/bin';
