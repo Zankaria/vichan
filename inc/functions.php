@@ -14,6 +14,7 @@ require_once('inc/functions/generation-strategy.php');
 require_once('inc/functions/encoding.php');
 require_once('inc/functions/math.php');
 require_once('inc/functions/interop.php');
+require_once('inc/functions/text.php');
 
 
 $microtime_start = microtime(true);
@@ -511,18 +512,6 @@ function themeSettings($theme) {
 	return $settings;
 }
 
-function sprintf3($str, $vars, $delim = '%') {
-	$replaces = array();
-	foreach ($vars as $k => $v) {
-		$replaces[$delim . $k . $delim] = $v;
-	}
-	return str_replace(array_keys($replaces), array_values($replaces), $str);
-}
-
-function mb_substr_replace($string, $replacement, $start, $length) {
-	return mb_substr($string, 0, $start) . $replacement . mb_substr($string, $start + $length);
-}
-
 function setupBoard($array) {
 	global $board, $config;
 
@@ -832,42 +821,6 @@ function listBoards($just_uri = false) {
 	}
 
 	return $boards;
-}
-
-function until($timestamp) {
-	$difference = $timestamp - time();
-	switch(TRUE) {
-	case ($difference < 60):
-		return $difference . ' ' . ngettext('second', 'seconds', $difference);
-	case ($difference < 3600): //60*60 = 3600
-		return ($num = round($difference/(60))) . ' ' . ngettext('minute', 'minutes', $num);
-	case ($difference < 86400): //60*60*24 = 86400
-		return ($num = round($difference/(3600))) . ' ' . ngettext('hour', 'hours', $num);
-	case ($difference < 604800): //60*60*24*7 = 604800
-		return ($num = round($difference/(86400))) . ' ' . ngettext('day', 'days', $num);
-	case ($difference < 31536000): //60*60*24*365 = 31536000
-		return ($num = round($difference/(604800))) . ' ' . ngettext('week', 'weeks', $num);
-	default:
-		return ($num = round($difference/(31536000))) . ' ' . ngettext('year', 'years', $num);
-	}
-}
-
-function ago($timestamp) {
-	$difference = time() - $timestamp;
-	switch(TRUE) {
-	case ($difference < 60) :
-		return $difference . ' ' . ngettext('second', 'seconds', $difference);
-	case ($difference < 3600): //60*60 = 3600
-		return ($num = round($difference/(60))) . ' ' . ngettext('minute', 'minutes', $num);
-	case ($difference <  86400): //60*60*24 = 86400
-		return ($num = round($difference/(3600))) . ' ' . ngettext('hour', 'hours', $num);
-	case ($difference < 604800): //60*60*24*7 = 604800
-		return ($num = round($difference/(86400))) . ' ' . ngettext('day', 'days', $num);
-	case ($difference < 31536000): //60*60*24*365 = 31536000
-		return ($num = round($difference/(604800))) . ' ' . ngettext('week', 'weeks', $num);
-	default:
-		return ($num = round($difference/(31536000))) . ' ' . ngettext('year', 'years', $num);
-	}
 }
 
 function displayBan($ban) {
