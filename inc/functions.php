@@ -20,6 +20,7 @@ mb_internal_encoding('UTF-8');
 loadConfig();
 
 function init_locale($locale, $error='error') {
+	// If the PHP extension is not available, use the pure PHP dependency.
 	if (extension_loaded('gettext')) {
 		if (setlocale(LC_ALL, $locale) === false) {
 			//$error('The specified locale (' . $locale . ') does not exist on your platform!');
