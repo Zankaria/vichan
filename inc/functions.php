@@ -12,6 +12,7 @@ if (realpath($_SERVER['SCRIPT_FILENAME']) == str_replace('\\', '/', __FILE__)) {
 require_once('inc/bootstrap.php');
 require_once('inc/functions/generation-strategy.php');
 require_once('inc/functions/encoding.php');
+require_once('inc/functions/math.php');
 
 
 $microtime_start = microtime(true);
@@ -2664,35 +2665,6 @@ function generate_tripcode($name) {
 	}
 
 	return array($name, $trip);
-}
-
-// Highest common factor
-function hcf($a, $b){
-	$gcd = 1;
-	if ($a > $b) {
-		$a = $a+$b;
-		$b = $a-$b;
-		$a = $a-$b;
-	}
-	if ($b == (round($b / $a)) * $a) {
-		$gcd=$a;
-	} else {
-		for ($i = round($a / 2); $i; $i--) {
-			if ($a == round($a / $i) * $i && $b == round($b / $i) * $i) {
-				$gcd = $i;
-				$i = false;
-			}
-		}
-	}
-	return $gcd;
-}
-
-function fraction($numerator, $denominator, $sep) {
-	$gcf = hcf($numerator, $denominator);
-	$numerator = $numerator / $gcf;
-	$denominator = $denominator / $gcf;
-
-	return "{$numerator}{$sep}{$denominator}";
 }
 
 function getPostByHash($hash) {
