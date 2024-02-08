@@ -39,6 +39,19 @@ function init_locale($locale, $error='error') {
 $current_locale = 'en';
 
 
+/**
+ * Checks if the key is initialized, and assigns a default value to it if it isn't.
+ *
+ * @param array Reference to the array.
+ * @param mixed Key in the array.
+ * @param mixed Default value.
+ */
+function init_or_default(&$array, $key, $default) {
+	if (!isset($array[$key])) {
+		$array[$key] = $default;
+	}
+}
+
 function loadConfig() {
 	global $board, $config, $__ip, $debug, $__version, $microtime_start, $current_locale, $events;
 
@@ -46,17 +59,14 @@ function loadConfig() {
 
 	$boardsuffix = isset($board['uri']) ? $board['uri'] : '';
 
-	if (!isset($_SERVER['REMOTE_ADDR']))
-		$_SERVER['REMOTE_ADDR'] = '0.0.0.0';
+	init_or_default($_SERVER, 'REMOTE_ADDR', '0.0.0.0');
 
 	if (file_exists('tmp/cache/cache_config.php')) {
 		require_once('tmp/cache/cache_config.php');
 	}
 
 
-	if (isset($config['cache_config']) && 
-		$config['cache_config'] &&
-		$config = Cache::get('config_' . $boardsuffix ) ) {
+	if (isset($config['cache_config']) && $config['cache_config'] && $config = Cache::get('config_' . $boardsuffix)) {
 		$events = Cache::get('events_' . $boardsuffix );
 
 		define_groups();
@@ -66,11 +76,10 @@ function loadConfig() {
 		}
 
 		if ($config['locale'] != $current_locale) {
-				$current_locale = $config['locale'];
-				init_locale($config['locale'], $error);
+			$current_locale = $config['locale'];
+			init_locale($config['locale'], $error);
 		}
-	}
-	else {
+	} else {
 		$config = array();
 
 		reset_events();
@@ -155,14 +164,8 @@ function loadConfig() {
 			init_locale($config['locale'], $error);
 		}
 
-		if (!isset($config['global_message'])) {
-			$config['global_message'] = false;
-		}
-
-		if (!isset($config['post_url'])) {
-			$config['post_url'] = $config['root'] . $config['file_post'];
-		}
-
+		init_or_default($config, 'global_message', false);
+		init_or_default($config, 'post_url', $config['root'] . $config['file_post']);
 
 		if (!isset($config['referer_match'])) {
 			if (isset($_SERVER['HTTP_HOST'])) {
@@ -182,8 +185,8 @@ function loadConfig() {
 							'(' .
 								str_replace('%d', '\d+', preg_quote($config['file_page'], '/')) . '|' .
 								str_replace('%d', '\d+', preg_quote($config['file_page50'], '/')) . '|' .
-															str_replace(array('%d', '%s'), array('\d+', '[a-z0-9-]+'), preg_quote($config['file_page_slug'], '/')) . '|' .
-															str_replace(array('%d', '%s'), array('\d+', '[a-z0-9-]+'), preg_quote($config['file_page50_slug'], '/')) .
+								str_replace(array('%d', '%s'), array('\d+', '[a-z0-9-]+'), preg_quote($config['file_page_slug'], '/')) . '|' .
+								str_replace(array('%d', '%s'), array('\d+', '[a-z0-9-]+'), preg_quote($config['file_page50_slug'], '/')) .
 							')' .
 						'|' .
 							preg_quote($config['file_mod'], '/') . '\?\/.+' .
@@ -202,25 +205,12 @@ function loadConfig() {
 			$config['dir']['static'] = $config['root'] . 'static/';
 		}
 
-		if (!isset($config['image_blank'])) {
-			$config['image_blank'] = $config['dir']['static'] . 'blank.gif';
-		}
-
-		if (!isset($config['image_sticky'])) {
-			$config['image_sticky'] = $config['dir']['static'] . 'sticky.gif';
-		}
-		if (!isset($config['image_locked'])) {
-			$config['image_locked'] = $config['dir']['static'] . 'locked.gif';
-		}
-		if (!isset($config['image_bumplocked'])) {
-			$config['image_bumplocked'] = $config['dir']['static'] . 'sage.gif';
-		}
-		if (!isset($config['image_deleted'])) {
-			$config['image_deleted'] = $config['dir']['static'] . 'deleted.png';
-		}
-		if (!isset($config['image_cyclical'])) {
-			$config['image_cyclical'] = $config['dir']['static'] . 'cycle.png';
-		}
+		init_or_default($config, 'image_blank', $config['dir']['static'] . 'blank.gif');
+		init_or_default($config, 'image_sticky', $config['dir']['static'] . 'sticky.gif');
+		init_or_default($config, 'image_locked', $config['dir']['static'] . 'locked.gif');
+		init_or_default($config, 'image_bumplocked', $config['dir']['static'] . 'sage.gif');
+		init_or_default($config, 'image_deleted', $config['dir']['static'] . 'deleted.png');
+		init_or_default($config, 'image_cyclical', $config['dir']['static'] . 'cycle.png');
 
 		if (isset($board)) {
 			if (!isset($config['uri_thumb'])) {
@@ -236,28 +226,13 @@ function loadConfig() {
 			}
 		}
 
-		if (!isset($config['uri_stylesheets'])) {
-			$config['uri_stylesheets'] = $config['root'] . 'stylesheets/';
-		}
-
-		if (!isset($config['url_stylesheet'])) {
-			$config['url_stylesheet'] = $config['uri_stylesheets'] . 'style.css';
-		}
-		if (!isset($config['url_javascript'])) {
-			$config['url_javascript'] = $config['root'] . $config['file_script'];
-		}
-		if (!isset($config['additional_javascript_url'])) {
-			$config['additional_javascript_url'] = $config['root'];
-		}
-		if (!isset($config['uri_flags'])) {
-			$config['uri_flags'] = $config['root'] . 'static/flags/%s.png';
-		}
-		if (!isset($config['user_flag'])) {
-			$config['user_flag'] = false;
-		}
-		if (!isset($config['user_flags'])) {
-			$config['user_flags'] = array();
-		}
+		init_or_default($config, 'uri_stylesheets', $config['root'] . 'stylesheets/');
+		init_or_default($config, 'url_stylesheet', $config['uri_stylesheets'] . 'style.css');
+		init_or_default($config, 'url_javascript', $config['root'] . $config['file_script']);
+		init_or_default($config, 'additional_javascript_url', $config['root']);
+		init_or_default($config, 'uri_flags', $config['root'] . 'static/flags/%s.png');
+		init_or_default($config, 'user_flag', false);
+		init_or_default($config, 'user_flags', array());
 
 		if (!isset($__version)) {
 			$__version = file_exists('.installed') ? trim(file_get_contents('.installed')) : false;
@@ -268,12 +243,12 @@ function loadConfig() {
 			event_handler('post', 'diceRoller');
 		}
 
-		if (in_array('webm', $config['allowed_ext_files']) || in_array('mp4',  $config['allowed_ext_files'])) {
+		if (in_array('webm', $config['allowed_ext_files']) || in_array('mp4', $config['allowed_ext_files'])) {
 			event_handler('post', 'postHandler');
 		}
 	}
-	// Effectful config processing below:
 
+	// Effectual config processing below.
 	date_default_timezone_set($config['timezone']);
 
 	if ($config['root_file']) {
@@ -300,7 +275,7 @@ function loadConfig() {
 	}
 
 	if ($config['syslog']) {
-		openlog('tinyboard', LOG_ODELAY, LOG_SYSLOG); // open a connection to sysem logger
+		openlog('tinyboard', LOG_ODELAY, LOG_SYSLOG); // open a connection to system logger
 	}
 
 	if ($config['cache']['enabled']) {
@@ -332,23 +307,21 @@ function loadConfig() {
 		$config['anonymous'] = $config['anonymous'][array_rand($config['anonymous'])];
 	}
 
-	if ($config['debug']) {
-		if (!isset($debug)) {
-			$debug = array(
-				'sql' => array(),
-				'exec' => array(),
-				'purge' => array(),
-				'cached' => array(),
-				'write' => array(),
-				'time' => array(
-					'db_queries' => 0,
-					'exec' => 0,
-				),
-				'start' => $microtime_start,
-				'start_debug' => microtime(true)
-			);
-			$debug['start'] = $microtime_start;
-		}
+	if ($config['debug'] && !isset($debug)) {
+		$debug = array(
+			'sql' => array(),
+			'exec' => array(),
+			'purge' => array(),
+			'cached' => array(),
+			'write' => array(),
+			'time' => array(
+				'db_queries' => 0,
+				'exec' => 0,
+			),
+			'start' => $microtime_start,
+			'start_debug' => microtime(true)
+		);
+		$debug['start'] = $microtime_start;
 	}
 }
 
