@@ -16,9 +16,9 @@ class DbQueries {
 	 * MySQL error code for "table not found"
 	 * https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html#error_er_bad_table_error
 	 */
-	const MYSQL_ERR_BAD_TABLE = '42S02';
+	private const MYSQL_ERR_BAD_TABLE = '42S02';
 	// Cannot store the false boolean in the cache.
-	const CACHE_FALSE = 0x00;
+	protected const CACHE_FALSE = 0x00;
 
 	protected PDO $pdo;
 	protected CacheDriver $cache;
