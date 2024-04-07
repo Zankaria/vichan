@@ -358,10 +358,10 @@ if (isset($_POST['delete'])) {
 		}
 	}
 
-	checkDNSBL();
+	checkDNSBL($context->getCacheDriver());
 
 	// Check if board exists
-	if (!openBoard($_POST['board']))
+	if (!openBoard($context->getCacheDriver(), $_POST['board']))
 		error($config['error']['noboard']);
 
 	if ((!isset($_POST['mod']) || !$_POST['mod']) && $config['board_locked']) {
@@ -451,10 +451,10 @@ if (isset($_POST['delete'])) {
 		}
 	}
 
-	checkDNSBL();
+	checkDNSBL($context->getCacheDriver());
 
 	// Check if board exists
-	if (!openBoard($_POST['board']))
+	if (!openBoard($context->getCacheDriver(), $_POST['board']))
 		error($config['error']['noboard']);
 
 	if ((!isset($_POST['mod']) || !$_POST['mod']) && $config['board_locked']) {
@@ -552,8 +552,8 @@ if (isset($_POST['delete'])) {
 	$post = array('board' => $_POST['board'], 'files' => array());
 
 	// Check if board exists
-	if (!openBoard($post['board']))
-		error($config['error']['noboard']);
+	if (!openBoard($context->getCacheDriver(), $post['board']))
+		error($config['error']['noboard']);""
 
 	if ((!isset($_POST['mod']) || !$_POST['mod']) && $config['board_locked']) {
 		error("Board is locked");
@@ -652,7 +652,7 @@ if (isset($_POST['delete'])) {
 			(!isset($_SERVER['HTTP_REFERER']) || !preg_match($config['referer_match'], rawurldecode($_SERVER['HTTP_REFERER']))))
 			error($config['error']['referer']);
 
-		checkDNSBL();
+		checkDNSBL($context->getCacheDriver());
 
 
 		if ($post['mod'] = isset($_POST['mod']) && $_POST['mod']) {
