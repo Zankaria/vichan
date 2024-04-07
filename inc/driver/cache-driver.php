@@ -147,11 +147,13 @@ class CacheDrivers {
 				$key = str_replace("\0", '', $key);
 				$key = $this->prefix . $key;
 
-				if (!file_exists("{$this->base_path}/{$key}")) {
+				$fd = fopen("$this->base_path/$key", 'r');
+				if ($fd === false) {
 					return null;
 				}
 
-				$data = file_get_contents('tmp/cache/'.$key);
+				$data = stream_get_contents("$this->base_path/$key");
+				fclose($fd);
 				return json_decode($data, true);
 			}
 
@@ -161,7 +163,7 @@ class CacheDrivers {
 				$key = $this->prefix . $key;
 
 				$data = json_encode($value);
-				file_put_contents("{$this->base_path}/{$key}", $data);
+				file_put_contents("$this->base_path/$key", $data);
 			}
 
 			public function delete(string $key): void {
@@ -169,11 +171,11 @@ class CacheDrivers {
 				$key = str_replace("\0", '', $key);
 				$key = $this->prefix . $key;
 
-				@unlink("{$this->base_path}/{$key}");
+				@unlink("$this->base_path/$key");
 			}
 
 			public function flush(): void {
-				$files = glob("{$this->base_path}/{$this->prefix}*");
+				$files = glob("$this->base_path/$this->prefix*");
 				foreach ($files as $file) {
 					@unlink($file);
 				}
