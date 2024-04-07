@@ -1,13 +1,14 @@
 <?php
 namespace Vichan;
 
-use Vichan\Driver\{HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Driver\{CacheDriver, CacheDrivers, HttpDriver, HttpDrivers, Log, LogDrivers};
 
 defined('TINYBOARD') or exit;
 
 
 interface DependencyFactory {
 	public function buildLogDriver(): Log;
+	public function buildCacheDriver(): CacheDriver;
 	public function buildHttpDriver(): HttpDriver;
 }
 
@@ -44,11 +45,42 @@ class WebDependencyFactory implements DependencyFactory {
 			$this->config['max_filesize']
 		);
 	}
+
+	public function buildCacheDriver(): CacheDriver {
+		switch ($this->config['cache']['enabled']) {
+			case 'memcached':
+				return CacheDrivers::memcached(
+					$this->config['cache']['prefix'],
+					$this->config['cache']['memcached']
+				);
+			case 'redis':
+				return CacheDrivers::redis(
+					$this->config['cache']['prefix'],
+					$this->config['cache']['redis'][0],
+					$this->config['cache']['redis'][1],
+					$this->config['cache']['redis'][2],
+					$this->config['cache']['redis'][3]
+				);
+			case 'apcu':
+				return CacheDrivers::apcu();
+			case 'fs':
+				return CacheDrivers::filesystem(
+					$this->config['cache']['prefix'],
+					"/tmp/cache/{$this->config['cache']['prefix']}"
+				);
+			case 'none':
+				return CacheDrivers::none();
+			case 'php':
+			default:
+				return CacheDrivers::php_array();
+		}
+	}
 }
 
 class Context {
 	private DependencyFactory $factory;
 	private ?Log $log;
+	private ?CacheDriver $cache;
 	private ?HttpDriver $http;
 
 
@@ -58,6 +90,10 @@ class Context {
 
 	public function getLog(): Log {
 		return $this->log ??= $this->factory->buildLogDriver();
+	}
+
+	public function getCacheDriver(): CacheDriver {
+		return $this->lazyGet($this->cache, 'cacheDriver');
 	}
 
 	public function getHttpDriver(): HttpDriver {
