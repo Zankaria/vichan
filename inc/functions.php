@@ -4,6 +4,7 @@
  *  Copyright (c) 2010-2014 Tinyboard Development Group
  */
 
+use Vichan\Driver\CacheDriver;
 
 if (realpath($_SERVER['SCRIPT_FILENAME']) == str_replace('\\', '/', __FILE__)) {
 	// You cannot request this file directly.
@@ -277,9 +278,6 @@ function loadConfig() {
 	if ($config['syslog'])
 		openlog('tinyboard', LOG_ODELAY, LOG_SYSLOG); // open a connection to sysem logger
 
-	if ($config['cache']['enabled'])
-		require_once 'inc/cache.php';
-
 	if (in_array('webm', $config['allowed_ext_files']) ||
             in_array('mp4',  $config['allowed_ext_files']))
 		require_once 'inc/lib/webm/posthandler.php';
@@ -288,11 +286,8 @@ function loadConfig() {
 
 	if ($config['cache_config'] && !isset ($config['cache_config_loaded'])) {
 		file_put_contents('tmp/cache/cache_config.php', '<?php '.
-			'$config = array();'.
-			'$config[\'cache\'] = '.var_export($config['cache'], true).';'.
-			'$config[\'cache_config\'] = true;'.
-			'$config[\'debug\'] = '.var_export($config['debug'], true).';'.
-			'require_once(\'inc/cache.php\');'
+			'$config = array();' .
+			'$config[\'debug\'] = '. var_export($config['debug'], true) . ';'
 		);
 
 		$config['cache_config_loaded'] = true;
@@ -545,7 +540,7 @@ function setupBoard($array) {
 			or error("Couldn't create " . $board['dir'] . $config['dir']['img'] . ". Check permissions.", true);
 }
 
-function openBoard($uri) {
+function openBoard(CacheDriver $cache, $uri) {
 	global $config, $build_pages, $board;
 
 	if ($config['try_smarter'])
@@ -556,7 +551,7 @@ function openBoard($uri) {
 		return true;
 	}
 
-	$b = getBoardInfo($uri);
+	$b = getBoardInfo($cache, $uri);
 	if ($b) {
 		setupBoard($b);
 
@@ -569,10 +564,8 @@ function openBoard($uri) {
 	return false;
 }
 
-function getBoardInfo($uri) {
-	global $config;
-
-	if ($config['cache']['enabled'] && ($board = cache::get('board_' . $uri))) {
+function getBoardInfo(CacheDriver $cache, $uri) {
+	if ($board = $cache->get('board_' . $uri)) {
 		return $board;
 	}
 
@@ -581,16 +574,15 @@ function getBoardInfo($uri) {
 	$query->execute() or error(db_error($query));
 
 	if ($board = $query->fetch(PDO::FETCH_ASSOC)) {
-		if ($config['cache']['enabled'])
-			cache::set('board_' . $uri, $board);
+		$cache->set('board_' . $uri, $board);
 		return $board;
 	}
 
 	return false;
 }
 
-function boardTitle($uri) {
-	$board = getBoardInfo($uri);
+function boardTitle(CacheDriver $cache, $uri) {
+	$board = getBoardInfo($cache, $uri);
 	if ($board)
 		return $board['title'];
 	return false;
@@ -772,13 +764,14 @@ function hasPermission($action = null, $board = null, $_mod = null) {
 	return true;
 }
 
-function listBoards($just_uri = false) {
+function listBoards(CacheDriver $cache, $just_uri = false) {
 	global $config;
 
 	$just_uri ? $cache_name = 'all_boards_uri' : $cache_name = 'all_boards';
 
-	if ($config['cache']['enabled'] && ($boards = cache::get($cache_name)))
+	if ($boards = $cache->get($cache_name)) {
 		return $boards;
+	}
 
 	if (!$just_uri) {
 		$query = query("SELECT * FROM ``boards`` ORDER BY `uri`") or error(db_error());
@@ -791,8 +784,7 @@ function listBoards($just_uri = false) {
 		}
 	}
 
-	if ($config['cache']['enabled'])
-		cache::set($cache_name, $boards);
+	$cache->set($cache_name, $boards);
 
 	return $boards;
 }
@@ -833,7 +825,7 @@ function ago($timestamp) {
 	}
 }
 
-function displayBan($ban) {
+function displayBan(CacheDriver $cache, $ban) {
 	global $config, $board;
 
 	if (!$ban['seen']) {
@@ -843,7 +835,7 @@ function displayBan($ban) {
 	$ban['ip'] = $_SERVER['REMOTE_ADDR'];
 
 	if ($ban['post'] && isset($ban['post']['board'], $ban['post']['id'])) {
-		if (openBoard($ban['post']['board'])) {
+		if (openBoard($cache, $ban['post']['board'])) {
 			$query = query(sprintf("SELECT `files` FROM ``posts_%s`` WHERE `id` = " .
 				(int)$ban['post']['id'], $board['uri']));
 			if ($_post = $query->fetch(PDO::FETCH_ASSOC)) {
@@ -889,7 +881,7 @@ function displayBan($ban) {
 	));
 }
 
-function checkBan($board = false) {
+function checkBan(CacheDriver $cache, $board = false) {
 	global $config;
 
 	if (!isset($_SERVER['REMOTE_ADDR'])) {
@@ -916,7 +908,7 @@ function checkBan($board = false) {
 				Bans::delete($ban['id']);
 				if ($config['require_ban_view'] && !$ban['seen']) {
 					if (!isset($_POST['json_response'])) {
-						displayBan($ban);
+						displayBan($cache, $ban);
 					} else {
 						header('Content-Type: text/json');
 						die(json_encode(array('error' => true, 'banned' => true)));
@@ -924,7 +916,7 @@ function checkBan($board = false) {
 				}
 			} else {
 				if (!isset($_POST['json_response'])) {
-					displayBan($ban);
+					displayBan($cache, $ban);
 				} else {
 					header('Content-Type: text/json');
 					die(json_encode(array('error' => true, 'banned' => true)));
@@ -935,15 +927,14 @@ function checkBan($board = false) {
 
 	// I'm not sure where else to put this. It doesn't really matter where; it just needs to be called every
 	// now and then to keep the ban list tidy.
-	if ($config['cache']['enabled'] && $last_time_purged = cache::get('purged_bans_last')) {
+	if ($last_time_purged = $cache->get('purged_bans_last')) {
 		if (time() - $last_time_purged < $config['purge_bans'] )
 			return;
 	}
 
 	Bans::purge();
 
-	if ($config['cache']['enabled'])
-		cache::set('purged_bans_last', time());
+	$cache->set('purged_bans_last', time());
 }
 
 function threadLocked($id) {
@@ -1121,7 +1112,7 @@ function bumpThread($id) {
 }
 
 // Remove file from post
-function deleteFile($id, $remove_entirely_if_already=true, $file=null) {
+function deleteFile(CacheDriver $cache, $id, $remove_entirely_if_already=true, $file=null) {
 	global $board, $config;
 
 	$query = prepare(sprintf("SELECT `thread`, `files`, `num_files` FROM ``posts_%s`` WHERE `id` = :id LIMIT 1", $board['uri']));
@@ -1163,14 +1154,14 @@ function deleteFile($id, $remove_entirely_if_already=true, $file=null) {
 	$query->execute() or error(db_error($query));
 
 	if ($post['thread'])
-		buildThread($post['thread']);
+		buildThread($cache, $post['thread']);
 	else
-		buildThread($id);
+		buildThread($cache, $id);
 }
 
 // rebuild post (markup)
-function rebuildPost($id) {
-	global $board, $mod;
+function rebuildPost(CacheDriver $cache, $id) {
+	global $board;
 
 	$query = prepare(sprintf("SELECT * FROM ``posts_%s`` WHERE `id` = :id", $board['uri']));
 	$query->bindValue(':id', $id, PDO::PARAM_INT);
@@ -1179,7 +1170,7 @@ function rebuildPost($id) {
 	if ((!$post = $query->fetch(PDO::FETCH_ASSOC)) || !$post['body_nomarkup'])
 		return false;
 
-	markup($post['body'] = &$post['body_nomarkup']);
+	markup($cache, $post['body'] = &$post['body_nomarkup']);
 	$post = (object)$post;
 	event('rebuildpost', $post);
 	$post = (array)$post;
@@ -1189,13 +1180,13 @@ function rebuildPost($id) {
 	$query->bindValue(':id', $id, PDO::PARAM_INT);
 	$query->execute() or error(db_error($query));
 
-	buildThread($post['thread'] ? $post['thread'] : $id);
+	buildThread($cache, $post['thread'] ? $post['thread'] : $id);
 
 	return true;
 }
 
 // Delete a post (reply or thread)
-function deletePost($id, $error_if_doesnt_exist=true, $rebuild_after=true) {
+function deletePost(CacheDriver $cache, $id, $error_if_doesnt_exist=true, $rebuild_after=true) {
 	global $board, $config;
 
 	// Select post and replies (if thread) in one query
@@ -1255,13 +1246,13 @@ function deletePost($id, $error_if_doesnt_exist=true, $rebuild_after=true) {
 		if ($board['uri'] != $cite['board']) {
 			if (!isset($tmp_board))
 				$tmp_board = $board['uri'];
-			openBoard($cite['board']);
+			openBoard($cache, $cite['board']);
 		}
-		rebuildPost($cite['post']);
+		rebuildPost($cache, $cite['post']);
 	}
 
 	if (isset($tmp_board))
-		openBoard($tmp_board);
+		openBoard($cache, $tmp_board);
 
 	$query = prepare("DELETE FROM ``cites`` WHERE (`target_board` = :board AND (`target` = " . implode(' OR `target` = ', $ids) . ")) OR (`board` = :board AND (`post` = " . implode(' OR `post` = ', $ids) . "))");
 	$query->bindValue(':board', $board['uri']);
@@ -1288,8 +1279,8 @@ function deletePost($id, $error_if_doesnt_exist=true, $rebuild_after=true) {
         }
 
 	if (isset($rebuild) && $rebuild_after) {
-		buildThread($rebuild);
-		buildIndex();
+		buildThread($cache, $rebuild);
+		buildIndex($cache);
 	}
 
 	return true;
@@ -1353,8 +1344,8 @@ function thread_find_page($thread) {
 }
 
 // $brief means that we won't need to generate anything yet
-function index($page, $mod=false, $brief = false) {
-	global $board, $config, $debug;
+function index(CacheDriver $cache, $page, $mod=false, $brief = false) {
+	global $board, $config;
 
 	$body = '';
 	$offset = round($page*$config['threads_per_page']-$config['threads_per_page']);
@@ -1375,14 +1366,12 @@ function index($page, $mod=false, $brief = false) {
 	while ($th = $query->fetch(PDO::FETCH_ASSOC)) {
 		$thread = new Thread($th, $mod ? '?/' : $config['root'], $mod);
 
-		if ($config['cache']['enabled']) {
-			$cached = cache::get("thread_index_{$board['uri']}_{$th['id']}");
-			if (isset($cached['replies'], $cached['omitted'])) {
-				$replies = $cached['replies'];
-				$omitted = $cached['omitted'];
-			} else {
-				unset($cached);
-			}
+		$cached = $cache->get("thread_index_{$board['uri']}_{$th['id']}");
+		if (isset($cached['replies'], $cached['omitted'])) {
+			$replies = $cached['replies'];
+			$omitted = $cached['omitted'];
+		} else {
+			unset($cached);
 		}
 
 		if (!isset($cached)) {
@@ -1400,11 +1389,10 @@ function index($page, $mod=false, $brief = false) {
 				$omitted = false;
 			}
 
-			if ($config['cache']['enabled'])
-				cache::set("thread_index_{$board['uri']}_{$th['id']}", array(
-					'replies' => $replies,
-					'omitted' => $omitted,
-				));
+			$cache->set("thread_index_{$board['uri']}_{$th['id']}", [
+				'replies' => $replies,
+				'omitted' => $omitted,
+			]);
 		}
 
 		$num_images = 0;
@@ -1609,14 +1597,12 @@ function mute() {
 	return muteTime();
 }
 
-function checkMute() {
-	global $config, $debug;
+function checkMute(CacheDriver $cache) {
+	global $config;
 
-	if ($config['cache']['enabled']) {
-		// Cached mute?
-		if (($mute = cache::get("mute_${_SERVER['REMOTE_ADDR']}")) && ($mutetime = cache::get("mutetime_${_SERVER['REMOTE_ADDR']}"))) {
-			error(sprintf($config['error']['youaremuted'], $mute['time'] + $mutetime - time()));
-		}
+	// Cached mute?
+	if (($mute = $cache->get("mute_{$_SERVER['REMOTE_ADDR']}")) && ($mutetime = $cache->get("mutetime_{$_SERVER['REMOTE_ADDR']}"))) {
+		error(sprintf($config['error']['youaremuted'], $mute['time'] + $mutetime - time()));
 	}
 
 	$mutetime = muteTime();
@@ -1632,10 +1618,8 @@ function checkMute() {
 		}
 
 		if ($mute['time'] + $mutetime > time()) {
-			if ($config['cache']['enabled']) {
-				cache::set("mute_${_SERVER['REMOTE_ADDR']}", $mute, $mute['time'] + $mutetime - time());
-				cache::set("mutetime_${_SERVER['REMOTE_ADDR']}", $mutetime, $mute['time'] + $mutetime - time());
-			}
+			$cache->set("mute_{$_SERVER['REMOTE_ADDR']}", $mute, $mute['time'] + $mutetime - time());
+			$cache->set("mutetime_{$_SERVER['REMOTE_ADDR']}", $mutetime, $mute['time'] + $mutetime - time());
 			// Not expired yet
 			error(sprintf($config['error']['youaremuted'], $mute['time'] + $mutetime - time()));
 		} else {
@@ -1736,7 +1720,7 @@ function incrementSpamHash($hash) {
 	$query->execute() or error(db_error($query));
 }
 
-function buildIndex($global_api = "yes") {
+function buildIndex(CacheDriver $cache, $global_api = "yes") {
 	global $board, $config, $build_pages;
 
 	$catalog_api_action = generation_strategy('sb_api', array($board['uri']));
@@ -1760,24 +1744,22 @@ function buildIndex($global_api = "yes") {
 
 		$action = generation_strategy('sb_board', array($board['uri'], $page));
 		if ($action == 'rebuild' || $catalog_api_action == 'rebuild') {
-			$content = index($page, false, $wont_build_this_page);
+			$content = index($cache, $page, false, $wont_build_this_page);
 			if (!$content)
 				break;
 
 			// Tries to avoid rebuilding if the body is the same as the one in cache.
-			if ($config['cache']['enabled']) {
-				$contentHash = md5(json_encode($content['body']));
-				$contentHashKey = '_index_hashed_'. $board['uri'] . '_' . $page;
-				$cachedHash = cache::get($contentHashKey);
-				if ($cachedHash == $contentHash){
-					if ($config['api']['enabled']) {
-						// this is needed for the thread.json and catalog.json rebuilding below, which includes all pages.
-						$catalog[$page-1] = $content['threads'];
-					}
-					continue;
+			$contentHash = md5(json_encode($content['body']));
+			$contentHashKey = '_index_hashed_'. $board['uri'] . '_' . $page;
+			$cachedHash = $cache->get($contentHashKey);
+			if ($cachedHash == $contentHash){
+				if ($config['api']['enabled']) {
+					// this is needed for the thread.json and catalog.json rebuilding below, which includes all pages.
+					$catalog[$page - 1] = $content['threads'];
 				}
-				cache::set($contentHashKey, $contentHash, 3600);
+				continue;
 			}
+			$cache->set($contentHashKey, $contentHash, 3600);
 
 			// json api
 			if ($config['api']['enabled']) {
@@ -1884,7 +1866,7 @@ function buildJavascript() {
 	file_write($config['file_script'], $script);
 }
 
-function checkDNSBL() {
+function checkDNSBL(CacheDriver $cache) {
 	global $config;
 
 	if (isIPv6())
@@ -1908,7 +1890,7 @@ function checkDNSBL() {
 		if (($lookup = str_replace('%', $ipaddr, $blacklist[0])) == $blacklist[0])
 			$lookup = $ipaddr . '.' . $blacklist[0];
 
-		if (!$ip = DNS($lookup))
+		if (!$ip = DNS($cache, $lookup))
 			continue; // not in list
 
 		$blacklist_name = isset($blacklist[2]) ? $blacklist[2] : $blacklist[0];
@@ -2032,7 +2014,7 @@ function remove_modifiers($body) {
 	return preg_replace('@<tinyboard ([\w\s]+)>(.+?)</tinyboard>@usm', '', $body);
 }
 
-function markup(&$body, $track_cites = false, $op = false) {
+function markup(CacheDriver $cache, &$body, $track_cites = false, $op = false) {
 	global $board, $config, $markup_urls;
 
 	$modifiers = extract_modifiers($body);
@@ -2189,7 +2171,7 @@ function markup(&$body, $track_cites = false, $op = false) {
 			$clauses = array_unique($clauses);
 
 			if ($board['uri'] != $_board) {
-				if (!openBoard($_board))
+				if (!openBoard($cache, $_board))
 					continue; // Unknown board
 			}
 
@@ -2210,7 +2192,7 @@ function markup(&$body, $track_cites = false, $op = false) {
 
 		// Restore old board
 		if ($board['uri'] != $tmp_board)
-			openBoard($tmp_board);
+			openBoard($cache, $tmp_board);
 
 		foreach ($cites as $matches) {
 			$_board = $matches[2][0];
@@ -2348,17 +2330,17 @@ function strip_combining_chars($str) {
 	return preg_replace('/(\p{Me}|\p{Mn}){'.$limit.',}/u','', $str);
 }
 
-function buildThread($id, $return = false, $mod = false) {
+function buildThread(CacheDriver $cache, $id, $return = false, $mod = false) {
 	global $board, $config, $build_pages;
 	$id = round($id);
 
 	if (event('build-thread', $id))
 		return;
 
-	if ($config['cache']['enabled'] && !$mod) {
+	if (!$mod) {
 		// Clear cache
-		cache::delete("thread_index_{$board['uri']}_{$id}");
-		cache::delete("thread_{$board['uri']}_{$id}");
+		$cache->delete("thread_index_{$board['uri']}_{$id}");
+		$cache->delete("thread_{$board['uri']}_{$id}");
 	}
 
 	if ($config['try_smarter'] && !$mod)
@@ -2431,7 +2413,7 @@ function buildThread($id, $return = false, $mod = false) {
 }
 
 function buildThread50($id, $return = false, $mod = false, $thread = null, $antibot = false) {
-	global $board, $config, $build_pages;
+	global $board, $config;
 	$id = round($id);
 
 	if ($antibot)
@@ -2640,10 +2622,10 @@ function undoImage(array $post) {
 	}
 }
 
-function rDNS($ip_addr) {
+function rDNS(CacheDriver $cache, $ip_addr) {
 	global $config;
 
-	if ($config['cache']['enabled'] && ($host = cache::get('rdns_' . $ip_addr))) {
+	if ($host = $cache->get('rdns_' . $ip_addr)) {
 		return $host;
 	}
 
@@ -2663,16 +2645,15 @@ function rDNS($ip_addr) {
 		$host = $ip_addr;
 	}
 
-	if ($config['cache']['enabled'])
-		cache::set('rdns_' . $ip_addr, $host);
+	$cache->set('rdns_' . $ip_addr, $host);
 
 	return $host;
 }
 
-function DNS($host) {
+function DNS(CacheDriver $cache, $host) {
 	global $config;
 
-	if ($config['cache']['enabled'] && ($ip_addr = cache::get('dns_' . $host))) {
+	if ($cache->get('dns_' . $host)) {
 		return $ip_addr != '?' ? $ip_addr : false;
 	}
 
@@ -2688,8 +2669,7 @@ function DNS($host) {
 			$ip_addr = false;
 	}
 
-	if ($config['cache']['enabled'])
-		cache::set('dns_' . $host, $ip_addr !== false ? $ip_addr : '?');
+	$cache->set('dns_' . $host, $ip_addr !== false ? $ip_addr : '?');
 
 	return $ip_addr;
 }
