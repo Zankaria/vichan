@@ -1,10 +1,15 @@
 <?php
+
+use Vichan\AppContext;
+
 require 'inc/bootstrap.php';
 $global = isset($_GET['global']);
 $post = (isset($_GET['post']) ? $_GET['post'] : false);
 $board = (isset($_GET['board']) ? $_GET['board'] : false);
 
-if (!$post || !preg_match('/^delete_\d+$/', $post) || !$board || !openBoard($board)) {
+$ctx = new AppContext($config);
+
+if (!$post || !preg_match('/^delete_\d+$/', $post) || !$board || !openBoard($ctx->getCacheDriver(), $board)) {
 	header('HTTP/1.1 400 Bad Request');
 	error(_('Bad request.'));
 }
