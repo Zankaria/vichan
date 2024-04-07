@@ -2,7 +2,7 @@
 namespace Vichan;
 
 use RuntimeException;
-use Vichan\Driver\{HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Driver\{CacheDriver, HttpDriver, HttpDrivers, Log, LogDrivers};
 use Vichan\Service\HCaptchaQuery;
 use Vichan\Service\NativeCaptchaQuery;
 use Vichan\Service\ReCaptchaQuery;
@@ -85,6 +85,10 @@ function build_context(array $config): Context {
 				$config['captcha']['native']['provider_check'],
 				$config['captcha']['native']['extra']
 			);
+		},
+		CacheDriver::class => function($c) {
+			// Use the global for backwards compatibility.
+			return \cache::getCache();
 		}
 	]);
 }
