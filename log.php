@@ -1,11 +1,17 @@
 <?php
+
+use Vichan\AppContext;
+
 require 'inc/bootstrap.php';
 
 if (!isset($_GET['board']) || !preg_match("/{$config['board_regex']}/u", $_GET['board'])) {
 	http_response_code(400);
 	error('Bad board.');
 }
-if (!openBoard($_GET['board'])) {
+
+$ctx = new AppContext($config);
+
+if (!openBoard($ctx->getCacheDriver(), $_GET['board'])) {
 	http_response_code(404);
 	error('No board.');
 }
