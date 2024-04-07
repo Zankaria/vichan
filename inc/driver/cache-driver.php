@@ -10,9 +10,15 @@ defined('TINYBOARD') or exit;
 class CacheDrivers {
 	public static function memcached(string $prefix, string $memcached_server) {
 		$memcached = new Memcached();
-		$memcached->setOption(Memcached::OPT_BINARY_PROTOCOL, true);
-		$memcached->setOption(Memcached::OPT_PREFIX_KEY, $prefix);
-		$memcached->addServers($memcached_server);
+		if (!$memcached->setOption(Memcached::OPT_BINARY_PROTOCOL, true)) {
+			throw new RuntimeException('Unable to set the memcached protocol!');
+		}
+		if (!$memcached->setOption(Memcached::OPT_PREFIX_KEY, $prefix)) {
+			throw new RuntimeException('Unable to set the memcached prefix!');
+		}
+		if (!$memcached->addServers($memcached_server)) {
+			throw new RuntimeException('Unable to add the memcached server!');
+		}
 
 		return new class($memcached) implements CacheDriver {
 			private Memcached $inner;
@@ -51,7 +57,7 @@ class CacheDrivers {
 			$redis->auth($password);
 		}
 		if (!$redis->select($database)) {
-			return false;
+			throw new RuntimeException('Unable to connect to Redis!');
 		}
 
 		return new class($prefix, $redis) implements CacheDriver {
@@ -119,8 +125,12 @@ class CacheDrivers {
 			$base_path = "$base_path/";
 		}
 
-		if (!is_dir($base_path) || is_writable($base_path)) {
-			return false;
+		if (!is_dir($base_path)) {
+			throw new RuntimeException("$base_path is not a directory!");
+		}
+
+		if (!is_writable($base_path)) {
+			throw new RuntimeException("$base_path is not writable!");
 		}
 
 		return new class($prefix, $base_path) implements CacheDriver {
