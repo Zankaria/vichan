@@ -1,13 +1,14 @@
 <?php
 namespace Vichan;
 
-use Vichan\Driver\{HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Driver\{CacheDriver, HttpDriver, HttpDrivers, Log, LogDrivers};
 
 defined('TINYBOARD') or exit;
 
 
 interface DependencyFactory {
 	public function buildLogDriver(): Log;
+	public function buildCacheDriver(): CacheDriver;
 	public function buildHttpDriver(): HttpDriver;
 }
 
@@ -44,11 +45,16 @@ class WebDependencyFactory implements DependencyFactory {
 			$this->config['max_filesize']
 		);
 	}
+
+	public function buildCacheDriver(): CacheDriver {
+		return \cache::getCache();
+	}
 }
 
 class Context {
 	private DependencyFactory $factory;
 	private ?Log $log;
+	private ?CacheDriver $cache;
 	private ?HttpDriver $http;
 
 
@@ -58,6 +64,10 @@ class Context {
 
 	public function getLog(): Log {
 		return $this->log ??= $this->factory->buildLogDriver();
+	}
+
+	public function getCacheDriver(): CacheDriver {
+		return $this->cache ??= $this->factory->buildCacheDriver();
 	}
 
 	public function getHttpDriver(): HttpDriver {
