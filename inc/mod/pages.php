@@ -4,8 +4,8 @@
  */
 use Vichan\Context;
 use Vichan\Functions\Format;
-
 use Vichan\Functions\Net;
+use Vichan\Driver\CacheDriver;
 
 defined('TINYBOARD') or exit;
 
@@ -93,28 +93,26 @@ function mod_dashboard(Context $ctx) {
 
 	$args = [];
 
-	$args['boards'] = listBoards();
+	$args['boards'] = listBoards($ctx->get(CacheDriver::class)());
 
 	if (hasPermission($config['mod']['noticeboard'])) {
-		if (!$config['cache']['enabled'] || !$args['noticeboard'] = cache::get('noticeboard_preview')) {
+		if (!$args['noticeboard'] = $ctx->get(CacheDriver::class)()->get('noticeboard_preview')) {
 			$query = prepare("SELECT ``noticeboard``.*, `username` FROM ``noticeboard`` LEFT JOIN ``mods`` ON ``mods``.`id` = `mod` ORDER BY `id` DESC LIMIT :limit");
 			$query->bindValue(':limit', $config['mod']['noticeboard_dashboard'], PDO::PARAM_INT);
 			$query->execute() or error(db_error($query));
 			$args['noticeboard'] = $query->fetchAll(PDO::FETCH_ASSOC);
 
-			if ($config['cache']['enabled'])
-				cache::set('noticeboard_preview', $args['noticeboard']);
+			$ctx->get(CacheDriver::class)()->set('noticeboard_preview', $args['noticeboard']);
 		}
 	}
 
-	if (!$config['cache']['enabled'] || ($args['unread_pms'] = cache::get('pm_unreadcount_' . $mod['id'])) === false) {
+	if ($args['unread_pms'] = $ctx->get(CacheDriver::class)()->get('pm_unreadcount_' . $mod['id']) === false) {
 		$query = prepare('SELECT COUNT(*) FROM ``pms`` WHERE `to` = :id AND `unread` = 1');
 		$query->bindValue(':id', $mod['id']);
 		$query->execute() or error(db_error($query));
 		$args['unread_pms'] = $query->fetchColumn();
 
-		if ($config['cache']['enabled'])
-			cache::set('pm_unreadcount_' . $mod['id'], $args['unread_pms']);
+		$ctx->get(CacheDriver::class)()->set('pm_unreadcount_' . $mod['id'], $args['unread_pms']);
 	}
 
 	$query = query('SELECT COUNT(*) FROM ``reports``') or error(db_error($query));
@@ -280,12 +278,12 @@ function mod_search(Context $ctx, $type, $search_query_escaped, $page_no = 1) {
 
 	if ($type == 'posts') {
 		$query = '';
-		$boards = listBoards();
+		$boards = listBoards($ctx->get(CacheDriver::class)());
 		if (empty($boards))
 			error(_('There are no boards to search!'));
 
 		foreach ($boards as $board) {
-			openBoard($board['uri']);
+			openBoard($ctx->get(CacheDriver::class)(), $board['uri']);
 			if (!hasPermission($config['mod']['search_posts'], $board['uri']))
 				continue;
 
@@ -363,7 +361,9 @@ function mod_search(Context $ctx, $type, $search_query_escaped, $page_no = 1) {
 function mod_edit_board(Context $ctx, $boardName) {
 	global $board, $config;
 
-	if (!openBoard($boardName))
+	$cache = $ctx->get(CacheDriver::class);
+
+	if (!openBoard($cache, $boardName))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['manageboards'], $board['uri']))
@@ -378,10 +378,8 @@ function mod_edit_board(Context $ctx, $boardName) {
 			$query->bindValue(':uri', $board['uri']);
 			$query->execute() or error(db_error($query));
 
-			if ($config['cache']['enabled']) {
-				cache::delete('board_' . $board['uri']);
-				cache::delete('all_boards');
-			}
+			$cache->delete('board_' . $board['uri']);
+			$cache->delete('all_boards');
 
 			modLog('Deleted board: ' . sprintf($config['board_abbreviation'], $board['uri']), false);
 
@@ -405,7 +403,7 @@ function mod_edit_board(Context $ctx, $boardName) {
 				if ($board['uri'] != $cite['board']) {
 					if (!isset($tmp_board))
 						$tmp_board = $board;
-					openBoard($cite['board']);
+					openBoard($cache, $cite['board']);
 					rebuildPost($cite['post']);
 				}
 			}
@@ -446,10 +444,9 @@ function mod_edit_board(Context $ctx, $boardName) {
 			modLog('Edited board information for ' . sprintf($config['board_abbreviation'], $board['uri']), false);
 		}
 
-		if ($config['cache']['enabled']) {
-			cache::delete('board_' . $board['uri']);
-			cache::delete('all_boards');
-		}
+		$cache->delete('board_' . $board['uri']);
+		$cache->delete('all_boards');
+
 
 		Vichan\Functions\Theme\rebuild_themes('boards');
 
@@ -479,6 +476,8 @@ function mod_new_board(Context $ctx) {
 		if (!preg_match('/^' . $config['board_regex'] . '$/u', $_POST['uri']))
 			error(sprintf($config['error']['invalidfield'], 'URI'));
 
+		$cache = $ctx->get(CacheDriver::class)();
+
 		$bytes = 0;
 		$chars = preg_split('//u', $_POST['uri'], -1, PREG_SPLIT_NO_EMPTY);
 		foreach ($chars as $char) {
@@ -496,7 +495,7 @@ function mod_new_board(Context $ctx) {
 			exit;
 		}
 
-		if (openBoard($_POST['uri'])) {
+		if (openBoard($cache, $_POST['uri'])) {
 			error(sprintf($config['error']['boardexists'], $board['url']));
 		}
 
@@ -508,7 +507,7 @@ function mod_new_board(Context $ctx) {
 
 		modLog('Created a new board: ' . sprintf($config['board_abbreviation'], $_POST['uri']));
 
-		if (!openBoard($_POST['uri']))
+		if (!openBoard($cache, $_POST['uri']))
 			error(_("Couldn't open board after creation."));
 
 		$query = Element('posts.sql', array('board' => $board['uri']));
@@ -518,11 +517,11 @@ function mod_new_board(Context $ctx) {
 
 		query($query) or error(db_error());
 
-		if ($config['cache']['enabled'])
-			cache::delete('all_boards');
+		$cache = $ctx->get(CacheDriver::class);
+		$cache->delete('all_boards');
 
 		// Build the board
-		buildIndex();
+		buildIndex($cache);
 
 		Vichan\Functions\Theme\rebuild_themes('boards');
 
@@ -556,8 +555,8 @@ function mod_noticeboard(Context $ctx, $page_no = 1) {
 		$query->bindValue(':body', $_POST['body']);
 		$query->execute() or error(db_error($query));
 
-		if ($config['cache']['enabled'])
-			cache::delete('noticeboard_preview');
+		$cache = $ctx->get(CacheDriver::class);
+		$cache->delete('noticeboard_preview');
 
 		modLog('Posted a noticeboard entry');
 
@@ -592,7 +591,7 @@ function mod_noticeboard_delete(Context $ctx, $id) {
 	$config = $ctx->get('config');
 
 	if (!hasPermission($config['mod']['noticeboard_delete']))
-			error($config['error']['noaccess']);
+		error($config['error']['noaccess']);
 
 	$query = prepare('DELETE FROM ``noticeboard`` WHERE `id` = :id');
 	$query->bindValue(':id', $id);
@@ -600,8 +599,7 @@ function mod_noticeboard_delete(Context $ctx, $id) {
 
 	modLog('Deleted a noticeboard entry');
 
-	if ($config['cache']['enabled'])
-		cache::delete('noticeboard_preview');
+	$cache->delete('noticeboard_preview');
 
 	header('Location: ?/noticeboard', true, $config['redirect_http']);
 }
@@ -658,7 +656,7 @@ function mod_news_delete(Context $ctx, $id) {
 	$config = $ctx->get('config');
 
 	if (!hasPermission($config['mod']['news_delete']))
-			error($config['error']['noaccess']);
+		error($config['error']['noaccess']);
 
 	$query = prepare('DELETE FROM ``news`` WHERE `id` = :id');
 	$query->bindValue(':id', $id);
@@ -773,15 +771,15 @@ function mod_view_board(Context $ctx, $boardName, $page_no = 1) {
 	global $mod;
 	$config = $ctx->get('config');
 
-	if (!openBoard($boardName))
+	if (!openBoard($ctx->get(CacheDriver::class)(), $boardName))
 		error($config['error']['noboard']);
 
-	if (!$page = index($page_no, $mod)) {
+	if (!$page = index($ctx->get(CacheDriver::class)(), $mod)) {
 		error($config['error']['404']);
 	}
 
 	$page['pages'] = getPages(true);
-	$page['pages'][$page_no-1]['selected'] = true;
+	$page['pages'][$page_no - 1]['selected'] = true;
 	$page['btn'] = getPageButtons($page['pages'], true);
 	$page['mod'] = true;
 	$page['config'] = $config;
@@ -793,7 +791,7 @@ function mod_view_thread(Context $ctx, $boardName, $thread) {
 	global $mod;
 	$config = $ctx->get('config');
 
-	if (!openBoard($boardName))
+	if (!openBoard($ctx->get(CacheDriver::class)(), $boardName))
 		error($config['error']['noboard']);
 
 	$page = buildThread($thread, true, $mod);
@@ -804,7 +802,7 @@ function mod_view_thread50(Context $ctx, $boardName, $thread) {
 	global $mod;
 	$config = $ctx->get('config');
 
-	if (!openBoard($boardName))
+	if (!openBoard($ctx->get(CacheDriver::class)(), $boardName))
 		error($config['error']['noboard']);
 
 	$page = buildThread50($thread, true, $mod);
@@ -886,9 +884,9 @@ function mod_ip(Context $ctx, $cip) {
 	if ($config['mod']['dns_lookup'] && empty($config['ipcrypt_key']))
 		$args['hostname'] = rDNS($ip);
 
-	$boards = listBoards();
+	$boards = listBoards($ctx->get(CacheDriver::class)());
 	foreach ($boards as $board) {
-		openBoard($board['uri']);
+		openBoard($ctx->get(CacheDriver::class)(), $board['uri']);
 		if (!hasPermission($config['mod']['show_ip'], $board['uri']))
 			continue;
 		$query = prepare(sprintf('SELECT * FROM ``posts_%s`` WHERE `ip` = :ip ORDER BY `sticky` DESC, `id` DESC LIMIT :limit', $board['uri']));
@@ -978,13 +976,11 @@ function mod_edit_ban(Context $ctx, $ban_id) {
 		Bans::delete($ban_id);
 
 		header('Location: ?/', true, $config['redirect_http']);
-
 	}
 
 	$args['token'] = make_secure_link_token('edit_ban/' . $ban_id);
 
 	mod_page(_('Edit ban'), 'mod/edit_ban.html', $args);
-
 }
 
 function mod_ban(Context $ctx) {
@@ -1098,7 +1094,7 @@ function mod_ban_appeals(Context $ctx) {
 		$ban['mask'] = Bans::range_to_string(array($ban['ipstart'], $ban['ipend']));
 
 		if ($ban['post'] && isset($ban['post']['board'], $ban['post']['id'])) {
-			if (openBoard($ban['post']['board'])) {
+			if (openBoard($ctx->get(CacheDriver::class)(), $ban['post']['board'])) {
 				$query = query(sprintf("SELECT `num_files`, `files` FROM ``posts_%s`` WHERE `id` = " .
 					(int)$ban['post']['id'], $board['uri']));
 				if ($_post = $query->fetch(PDO::FETCH_ASSOC)) {
@@ -1134,7 +1130,9 @@ function mod_ban_appeals(Context $ctx) {
 function mod_lock(Context $ctx, $board, $unlock, $post) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['lock'], $board))
@@ -1146,8 +1144,8 @@ function mod_lock(Context $ctx, $board, $unlock, $post) {
 	$query->execute() or error(db_error($query));
 	if ($query->rowCount()) {
 		modLog(($unlock ? 'Unlocked' : 'Locked') . " thread #{$post}");
-		buildThread($post);
-		buildIndex();
+		buildThread($cache, $post);
+		buildIndex($cache);
 	}
 
 	if ($config['mod']['dismiss_reports_on_lock']) {
@@ -1168,7 +1166,9 @@ function mod_lock(Context $ctx, $board, $unlock, $post) {
 function mod_sticky(Context $ctx, $board, $unsticky, $post) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['sticky'], $board))
@@ -1180,8 +1180,8 @@ function mod_sticky(Context $ctx, $board, $unsticky, $post) {
 	$query->execute() or error(db_error($query));
 	if ($query->rowCount()) {
 		modLog(($unsticky ? 'Unstickied' : 'Stickied') . " thread #{$post}");
-		buildThread($post);
-		buildIndex();
+		buildThread($cache, $post);
+		buildIndex($cache);
 	}
 
 	header('Location: ?/' . sprintf($config['board_path'], $board) . $config['file_index'], true, $config['redirect_http']);
@@ -1190,7 +1190,9 @@ function mod_sticky(Context $ctx, $board, $unsticky, $post) {
 function mod_cycle(Context $ctx, $board, $uncycle, $post) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['cycle'], $board))
@@ -1202,8 +1204,8 @@ function mod_cycle(Context $ctx, $board, $uncycle, $post) {
 	$query->execute() or error(db_error($query));
 	if ($query->rowCount()) {
 		modLog(($uncycle ? 'Made not cyclical' : 'Made cyclical') . " thread #{$post}");
-		buildThread($post);
-		buildIndex();
+		buildThread($cache, $post);
+		buildIndex($cache);
 	}
 
 	header('Location: ?/' . sprintf($config['board_path'], $board) . $config['file_index'], true, $config['redirect_http']);
@@ -1212,7 +1214,9 @@ function mod_cycle(Context $ctx, $board, $uncycle, $post) {
 function mod_bumplock(Context $ctx, $board, $unbumplock, $post) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['bumplock'], $board))
@@ -1224,8 +1228,8 @@ function mod_bumplock(Context $ctx, $board, $unbumplock, $post) {
 	$query->execute() or error(db_error($query));
 	if ($query->rowCount()) {
 		modLog(($unbumplock ? 'Unbumplocked' : 'Bumplocked') . " thread #{$post}");
-		buildThread($post);
-		buildIndex();
+		buildThread($cache, $post);
+		buildIndex($cache);
 	}
 
 	header('Location: ?/' . sprintf($config['board_path'], $board) . $config['file_index'], true, $config['redirect_http']);
@@ -1234,7 +1238,9 @@ function mod_bumplock(Context $ctx, $board, $unbumplock, $post) {
 function mod_move_reply(Context $ctx, $originBoard, $postID) {
 	global $board, $config;
 
-	if (!openBoard($originBoard))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $originBoard))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['move'], $originBoard))
@@ -1275,7 +1281,7 @@ function mod_move_reply(Context $ctx, $originBoard, $postID) {
 		// allow thread to keep its same traits (stickied, locked, etc.)
 		$post['mod'] = true;
 
-		if (!openBoard($targetBoard))
+		if (!openBoard($cache, $targetBoard))
 			error($config['error']['noboard']);
 
 		// create the new post
@@ -1293,9 +1299,9 @@ function mod_move_reply(Context $ctx, $originBoard, $postID) {
 		}
 
 		// build index
-		buildIndex();
+		buildIndex($cache);
 		// build new thread
-		buildThread($newID);
+		buildThread($cache, $newID);
 
 		// trigger themes
 		Vichan\Functions\Theme\rebuild_themes('post', $targetBoard);
@@ -1303,14 +1309,14 @@ function mod_move_reply(Context $ctx, $originBoard, $postID) {
 		modLog("Moved post #{$postID} to " . sprintf($config['board_abbreviation'], $targetBoard) . " (#{$newID})", $originBoard);
 
 		// return to original board
-		openBoard($originBoard);
+		openBoard($cache, $originBoard);
 
 		// delete original post
 		deletePost($postID);
-		buildIndex();
+		buildIndex($cache);
 
 		// open target board for redirect
-		openBoard($targetBoard);
+		openBoard($cache, $targetBoard);
 
 		// Find new thread on our target board
 		$query = prepare(sprintf('SELECT thread FROM ``posts_%s`` WHERE `id` = :id', $targetBoard));
@@ -1321,22 +1327,21 @@ function mod_move_reply(Context $ctx, $originBoard, $postID) {
 		// redirect
 		header('Location: ?/' . sprintf($config['board_path'], $board['uri']) . $config['dir']['res'] . link_for($post) . '#' . $newID, true, $config['redirect_http']);
 	}
-
 	else {
-		$boards = listBoards();
+		$boards = listBoards($cache);
 
 		$security_token = make_secure_link_token($originBoard . '/move_reply/' . $postID);
 
 		mod_page(_('Move reply'), $config['file_mod_move_reply'], array('post' => $postID, 'board' => $originBoard, 'boards' => $boards, 'token' => $security_token));
-
 	}
-
 }
 
 function mod_move(Context $ctx, $originBoard, $postID) {
 	global $board, $config, $pdo;
 
-	if (!openBoard($originBoard))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $originBoard))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['move'], $originBoard))
@@ -1377,7 +1382,7 @@ function mod_move(Context $ctx, $originBoard, $postID) {
 		// allow thread to keep its same traits (stickied, locked, etc.)
 		$post['mod'] = true;
 
-		if (!openBoard($targetBoard))
+		if (!openBoard($cache, $targetBoard))
 			error($config['error']['noboard']);
 
 		// create the new thread
@@ -1397,7 +1402,7 @@ function mod_move(Context $ctx, $originBoard, $postID) {
 		}
 
 		// go back to the original board to fetch replies
-		openBoard($originBoard);
+		openBoard($cache, $originBoard);
 
 		$query = prepare(sprintf('SELECT * FROM ``posts_%s`` WHERE `thread` = :id ORDER BY `id`', $originBoard));
 		$query->bindValue(':id', $postID, PDO::PARAM_INT);
@@ -1427,7 +1432,7 @@ function mod_move(Context $ctx, $originBoard, $postID) {
 
 		$newIDs = array($postID => $newID);
 
-		openBoard($targetBoard);
+		openBoard($cache, $targetBoard);
 
 		foreach ($replies as &$post) {
 			$query = prepare('SELECT `target` FROM ``cites`` WHERE `target_board` = :board AND `board` = :board AND `post` = :post');
@@ -1480,10 +1485,10 @@ function mod_move(Context $ctx, $originBoard, $postID) {
 		modLog("Moved thread #{$postID} to " . sprintf($config['board_abbreviation'], $targetBoard) . " (#{$newID})", $originBoard);
 
 		// build new thread
-		buildThread($newID);
+		buildThread($cache, $newID);
 
 		clean();
-		buildIndex();
+		buildIndex($cache);
 
 		// trigger themes
 		Vichan\Functions\Theme\rebuild_themes('post', $targetBoard);
@@ -1491,7 +1496,7 @@ function mod_move(Context $ctx, $originBoard, $postID) {
 		$newboard = $board;
 
 		// return to original board
-		openBoard($originBoard);
+		openBoard($cache, $originBoard);
 
 		if ($shadow) {
 			// lock old thread
@@ -1519,22 +1524,22 @@ function mod_move(Context $ctx, $originBoard, $postID) {
 			markup($spost['body']);
 
 			$botID = post($spost);
-			buildThread($postID);
+			buildThread($cache, $postID);
 
-			buildIndex();
+			buildIndex($cache);
 
 			header('Location: ?/' . sprintf($config['board_path'], $newboard['uri']) . $config['dir']['res'] . link_for($op, false, $newboard) .
 				'#' . $botID, true, $config['redirect_http']);
 		} else {
 			deletePost($postID);
-			buildIndex();
+			buildIndex($cache);
 
-			openBoard($targetBoard);
+			openBoard($cache, $targetBoard);
 			header('Location: ?/' . sprintf($config['board_path'], $newboard['uri']) . $config['dir']['res'] . link_for($op, false, $newboard), true, $config['redirect_http']);
 		}
 	}
 
-	$boards = listBoards();
+	$boards = listBoards($cache);
 	if (count($boards) <= 1)
 		error(_('Impossible to move thread; there is only one board.'));
 
@@ -1546,7 +1551,9 @@ function mod_move(Context $ctx, $originBoard, $postID) {
 function mod_ban_post(Context $ctx, $board, $delete, $post, $token = false) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['ban'], $board))
@@ -1584,14 +1591,14 @@ function mod_ban_post(Context $ctx, $board, $delete, $post, $token = false) {
 			rebuildPost($post);
 
 			modLog("Attached a public ban message to post #{$post}: " . utf8tohtml($_POST['message']));
-			buildThread($thread ? $thread : $post);
-			buildIndex();
+			buildThread($cache, $thread ? $thread : $post);
+			buildIndex($cache);
 		} elseif (isset($_POST['delete']) && (int) $_POST['delete']) {
 			// Delete post
 			deletePost($post);
 			modLog("Deleted post #{$post}");
 			// Rebuild board
-			buildIndex();
+			buildIndex($cache);
 			// Rebuild themes
 			Vichan\Functions\Theme\rebuild_themes('post-delete', $board);
 		}
@@ -1605,7 +1612,7 @@ function mod_ban_post(Context $ctx, $board, $delete, $post, $token = false) {
 		'post' => $post,
 		'board' => $board,
 		'delete' => (bool)$delete,
-		'boards' => listBoards(),
+		'boards' => listBoards($cache),
 		'reasons' => $config['premade_ban_reasons'],
 		'token' => $security_token
 	);
@@ -1616,7 +1623,9 @@ function mod_ban_post(Context $ctx, $board, $delete, $post, $token = false) {
 function mod_edit_post(Context $ctx, $board, $edit_raw_html, $postID) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['editpost'], $board))
@@ -1666,7 +1675,7 @@ function mod_edit_post(Context $ctx, $board, $edit_raw_html, $postID) {
 			rebuildPost($postID);
 		}
 
-		buildIndex();
+		buildIndex($cache);
 
 		Vichan\Functions\Theme\rebuild_themes('post', $board);
 
@@ -1693,7 +1702,9 @@ function mod_edit_post(Context $ctx, $board, $edit_raw_html, $postID) {
 function mod_delete(Context $ctx, $board, $post) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['delete'], $board))
@@ -1704,7 +1715,7 @@ function mod_delete(Context $ctx, $board, $post) {
 	// Record the action
 	modLog("Deleted post #{$post}");
 	// Rebuild board
-	buildIndex();
+	buildIndex($cache);
 	// Rebuild themes
 	Vichan\Functions\Theme\rebuild_themes('post-delete', $board);
 	// Redirect
@@ -1714,7 +1725,9 @@ function mod_delete(Context $ctx, $board, $post) {
 function mod_deletefile(Context $ctx, $board, $post, $file) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['deletefile'], $board))
@@ -1726,7 +1739,7 @@ function mod_deletefile(Context $ctx, $board, $post, $file) {
 	modLog("Deleted file from post #{$post}");
 
 	// Rebuild board
-	buildIndex();
+	buildIndex($cache);
 	// Rebuild themes
 	Vichan\Functions\Theme\rebuild_themes('post-delete', $board);
 
@@ -1737,7 +1750,9 @@ function mod_deletefile(Context $ctx, $board, $post, $file) {
 function mod_spoiler_image(Context $ctx, $board, $post, $file) {
 	$config = $ctx->get('config');
 
-	if (!openBoard($board))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if (!openBoard($cache, $board))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['spoilerimage'], $board))
@@ -1767,10 +1782,10 @@ function mod_spoiler_image(Context $ctx, $board, $post, $file) {
 	modLog("Spoilered file from post #{$post}");
 
 	// Rebuild thread
-	buildThread($result['thread'] ? $result['thread'] : $post);
+	buildThread($cache, $result['thread'] ? $result['thread'] : $post);
 
 	// Rebuild board
-	buildIndex();
+	buildIndex($cache);
 
 	// Rebuild themes
 	Vichan\Functions\Theme\rebuild_themes('post-delete', $board);
@@ -1784,8 +1799,9 @@ function mod_deletebyip(Context $ctx, $boardName, $post, $global = false) {
 	$config = $ctx->get('config');
 
 	$global = (bool)$global;
+	$cache = $ctx->get(CacheDriver::class)();
 
-	if (!openBoard($boardName))
+	if (!openBoard($cache, $boardName))
 		error($config['error']['noboard']);
 
 	if (!$global && !hasPermission($config['mod']['deletebyip'], $boardName))
@@ -1801,7 +1817,7 @@ function mod_deletebyip(Context $ctx, $boardName, $post, $global = false) {
 	if (!$ip = $query->fetchColumn())
 		error($config['error']['invalidpost']);
 
-	$boards = $global ? listBoards() : array(array('uri' => $boardName));
+	$boards = $global ? listBoards($cache) : array(array('uri' => $boardName));
 
 	$query = '';
 	foreach ($boards as $_board) {
@@ -1821,13 +1837,13 @@ function mod_deletebyip(Context $ctx, $boardName, $post, $global = false) {
 	$threads_to_rebuild = [];
 	$threads_deleted = [];
 	while ($post = $query->fetch(PDO::FETCH_ASSOC)) {
-		openBoard($post['board']);
+		openBoard($cache, $post['board']);
 
 		deletePost($post['id'], false, false);
 
 		Vichan\Functions\Theme\rebuild_themes('post-delete', $board['uri']);
 
-		buildIndex();
+		buildIndex($cache);
 
 		if ($post['thread'])
 			$threads_to_rebuild[$post['board']][$post['thread']] = true;
@@ -1836,12 +1852,12 @@ function mod_deletebyip(Context $ctx, $boardName, $post, $global = false) {
 	}
 
 	foreach ($threads_to_rebuild as $_board => $_threads) {
-		openBoard($_board);
+		openBoard($cache, $_board);
 		foreach ($_threads as $_thread => $_dummy) {
 			if ($_dummy && !isset($threads_deleted[$_board][$_thread]))
-				buildThread($_thread);
+				buildThread($cache, $_thread);
 		}
-		buildIndex();
+		buildIndex($cache);
 	}
 
 	if ($global) {
@@ -1873,7 +1889,7 @@ function mod_user(Context $ctx, $uid) {
 		if (isset($_POST['allboards'])) {
 			$boards = array('*');
 		} else {
-			$_boards = listBoards();
+			$_boards = listBoards($ctx->get(CacheDriver::class)());
 			foreach ($_boards as &$board) {
 				$board = $board['uri'];
 			}
@@ -1977,7 +1993,7 @@ function mod_user(Context $ctx, $uid) {
 	mod_page(_('Edit user'), $config['file_mod_user'], array(
 		'user' => $user,
 		'logs' => $log,
-		'boards' => listBoards(),
+		'boards' => listBoards($ctx->get(CacheDriver::class)()),
 		'token' => make_secure_link_token('users/' . $user['id'])
 	));
 }
@@ -2117,10 +2133,9 @@ function mod_pm(Context $ctx, $id, $reply = false) {
 		$query->bindValue(':id', $id);
 		$query->execute() or error(db_error($query));
 
-		if ($config['cache']['enabled']) {
-			cache::delete('pm_unread_' . $mod['id']);
-			cache::delete('pm_unreadcount_' . $mod['id']);
-		}
+		$cache = $ctx->get(CacheDriver::class);
+		$cache->delete('pm_unread_' . $mod['id']);
+		$cache->delete('pm_unreadcount_' . $mod['id']);
 
 		header('Location: ?/', true, $config['redirect_http']);
 		return;
@@ -2131,10 +2146,9 @@ function mod_pm(Context $ctx, $id, $reply = false) {
 		$query->bindValue(':id', $id);
 		$query->execute() or error(db_error($query));
 
-		if ($config['cache']['enabled']) {
-			cache::delete('pm_unread_' . $mod['id']);
-			cache::delete('pm_unreadcount_' . $mod['id']);
-		}
+		$cache = $ctx->get(CacheDriver::class);
+		$cache->delete('pm_unread_' . $mod['id']);
+		$cache->delete('pm_unreadcount_' . $mod['id']);
 
 		modLog('Read a PM');
 	}
@@ -2211,10 +2225,10 @@ function mod_new_pm(Context $ctx, $username) {
 		$query->bindValue(':time', time());
 		$query->execute() or error(db_error($query));
 
-		if ($config['cache']['enabled']) {
-			cache::delete('pm_unread_' . $id);
-			cache::delete('pm_unreadcount_' . $id);
-		}
+		$cache = $ctx->get(CacheDriver::class)();
+
+		$cache->delete('pm_unread_' . $id);
+		$cache->delete('pm_unreadcount_' . $id);
 
 		modLog('Sent a PM to ' . utf8tohtml($username));
 
@@ -2235,17 +2249,20 @@ function mod_rebuild(Context $ctx) {
 	if (!hasPermission($config['mod']['rebuild']))
 		error($config['error']['noaccess']);
 
+	$cache = $ctx->get(CacheDriver::class);
+
 	if (isset($_POST['rebuild'])) {
 		@set_time_limit($config['mod']['rebuild_timelimit']);
 
 		$log = [];
-		$boards = listBoards();
+		$boards = listBoards($cache);
 		$rebuilt_scripts = [];
 
 		if (isset($_POST['rebuild_cache'])) {
 			if ($config['cache']['enabled']) {
 				$log[] = 'Flushing cache';
-				Cache::flush();
+				$cache = $ctx->get(CacheDriver::class);
+				$cache->flush();
 			}
 
 			$log[] = 'Clearing template cache';
@@ -2268,11 +2285,11 @@ function mod_rebuild(Context $ctx) {
 			if (!(isset($_POST['boards_all']) || isset($_POST['board_' . $board['uri']])))
 				continue;
 
-			openBoard($board['uri']);
+			openBoard($cache, $board['uri']);
 			$config['try_smarter'] = false;
 
 			if (isset($_POST['rebuild_index'])) {
-				buildIndex();
+				buildIndex($cache);
 				$log[] = '<strong>' . sprintf($config['board_abbreviation'], $board['uri']) . '</strong>: Creating index pages';
 			}
 
@@ -2286,7 +2303,7 @@ function mod_rebuild(Context $ctx) {
 				$query = query(sprintf("SELECT `id` FROM ``posts_%s`` WHERE `thread` IS NULL", $board['uri'])) or error(db_error());
 				while ($post = $query->fetch(PDO::FETCH_ASSOC)) {
 					$log[] = '<strong>' . sprintf($config['board_abbreviation'], $board['uri']) . '</strong>: Rebuilding thread #' . $post['id'];
-					buildThread($post['id']);
+					buildThread($cache, $post['id']);
 				}
 			}
 		}
@@ -2296,7 +2313,7 @@ function mod_rebuild(Context $ctx) {
 	}
 
 	mod_page(_('Rebuild'), $config['file_mod_rebuild'], array(
-		'boards' => listBoards(),
+		'boards' => listBoards($cache),
 		'token' => make_secure_link_token('rebuild')
 	));
 }
@@ -2304,6 +2321,8 @@ function mod_rebuild(Context $ctx) {
 function mod_reports(Context $ctx) {
 	global $mod;
 	$config = $ctx->get('config');
+
+	$cache = $ctx->get(CacheDriver::class)();
 
 	if (!hasPermission($config['mod']['reports']))
 		error($config['error']['noaccess']);
@@ -2342,7 +2361,7 @@ function mod_reports(Context $ctx) {
 			continue;
 		}
 
-		openBoard($report['board']);
+		openBoard($cache, $report['board']);
 
 		$post = &$report_posts[$report['board']][$report['post']];
 
@@ -2438,11 +2457,13 @@ function mod_recent_posts(Context $ctx, $lim) {
 	if (!hasPermission($config['mod']['recent']))
 		error($config['error']['noaccess']);
 
+	$cache = $ctx->get(CacheDriver::class)();
+
 	$limit = (is_numeric($lim))? $lim : 25;
 	$last_time = (isset($_GET['last']) && is_numeric($_GET['last'])) ? $_GET['last'] : 0;
 
 	$mod_boards = [];
-	$boards = listBoards();
+	$boards = listBoards($cache);
 
 	//if not all boards
 	if ($mod['boards'][0]!='*') {
@@ -2467,7 +2488,7 @@ function mod_recent_posts(Context $ctx, $lim) {
 	$posts = $query->fetchAll(PDO::FETCH_ASSOC);
 
 	foreach ($posts as &$post) {
-		openBoard($post['board']);
+		openBoard($cache, $post['board']);
 		if (!$post['thread']) {
 			// Still need to fix this:
 			$po = new Thread($post, '?/', $mod, false);
@@ -2485,14 +2506,15 @@ function mod_recent_posts(Context $ctx, $lim) {
 			'last_time' => $last_time
 		)
 	);
-
 }
 
 function mod_config(Context $ctx, $board_config = false) {
 	global $mod, $board;
 	$config = $ctx->get('config');
 
-	if ($board_config && !openBoard($board_config))
+	$cache = $ctx->get(CacheDriver::class)();
+
+	if ($board_config && !openBoard($cache, $board_config))
 		error($config['error']['noboard']);
 
 	if (!hasPermission($config['mod']['edit_config'], $board_config))
@@ -2528,7 +2550,7 @@ function mod_config(Context $ctx, $board_config = false) {
 		mod_page(_('Config editor'), $config['file_mod_config_editor_php'], array(
 			'php' => $instance_config,
 			'readonly' => $readonly,
-			'boards' => listBoards(),
+			'boards' => listBoards($cache),
 			'board' => $board_config,
 			'file' => $config_file,
 			'token' => make_secure_link_token('config' . ($board_config ? '/' . $board_config : ''))
@@ -2621,7 +2643,7 @@ function mod_config(Context $ctx, $board_config = false) {
 
 	mod_page(_('Config editor') . ($board_config ? ': ' . sprintf($config['board_abbreviation'], $board_config) : ''),
 		$config['file_mod_config_editor'], array(
-			'boards' => listBoards(),
+			'boards' => listBoards($cache),
 			'board' => $board_config,
 			'conf' => $conf,
 			'file' => $config_file,
@@ -2673,6 +2695,8 @@ function mod_theme_configure(Context $ctx, $theme_name) {
 		error($config['error']['invalidtheme']);
 	}
 
+	$cache = $ctx->get(CacheDriver::class)();
+
 	if (isset($_POST['install'])) {
 		// Check if everything is submitted
 		foreach ($theme['config'] as &$conf) {
@@ -2701,8 +2725,8 @@ function mod_theme_configure(Context $ctx, $theme_name) {
 		$query->execute() or error(db_error($query));
 
 		// Clean cache
-		Cache::delete("themes");
-		Cache::delete("theme_settings_".$theme_name);
+		$cache->delete("themes");
+		$cache->delete("theme_settings_$theme_name");
 
 		$result = true;
 		$message = false;
@@ -2751,13 +2775,15 @@ function mod_theme_uninstall(Context $ctx, $theme_name) {
 	if (!hasPermission($config['mod']['themes']))
 		error($config['error']['noaccess']);
 
+	$cache = $ctx->get(CacheDriver::class)();
+
 	$query = prepare("DELETE FROM ``theme_settings`` WHERE `theme` = :theme");
 	$query->bindValue(':theme', $theme_name);
 	$query->execute() or error(db_error($query));
 
 	// Clean cache
-	Cache::delete("themes");
-	Cache::delete("theme_settings_".$theme_name);
+	$cache->delete("themes");
+	$cache->delete("theme_settings_$theme_name");
 
 	header('Location: ?/themes', true, $config['redirect_http']);
 }
@@ -2776,7 +2802,7 @@ function mod_theme_rebuild(Context $ctx, $theme_name) {
 }
 
 // This needs to be done for `secure` CSRF prevention compatibility, otherwise the $board will be read in as the token if editing global pages.
-function delete_page_base($page = '', $board = false) {
+function delete_page_base(Context $ctx, $page = '', $board = false) {
 	global $config, $mod;
 
 	if (empty($board))
@@ -2788,7 +2814,7 @@ function delete_page_base($page = '', $board = false) {
 	if (!hasPermission($config['mod']['edit_pages'], $board))
 		error($config['error']['noaccess']);
 
-	if ($board !== FALSE && !openBoard($board))
+	if ($board !== FALSE && !openBoard($ctx->get(CacheDriver::class)(), $board))
 		error($config['error']['noboard']);
 
 	if ($board) {
@@ -2829,7 +2855,7 @@ function mod_edit_page(Context $ctx, $id) {
 	if (!hasPermission($config['mod']['edit_pages'], $page['board']))
 		error($config['error']['noaccess']);
 
-	if ($page['board'] && !openBoard($page['board']))
+	if ($page['board'] && !openBoard($ctx->get(CacheDriver::class)(), $page['board']))
 		error($config['error']['noboard']);
 
 	if (isset($_POST['method'], $_POST['content'])) {
@@ -2896,7 +2922,7 @@ function mod_pages(Context $ctx, $board = false) {
 	if (!hasPermission($config['mod']['edit_pages'], $board))
 		error($config['error']['noaccess']);
 
-	if ($board !== FALSE && !openBoard($board))
+	if ($board !== FALSE && !openBoard($ctx->get(CacheDriver::class)(), $board))
 		error($config['error']['noboard']);
 
 	if ($board) {
@@ -2980,7 +3006,7 @@ function mod_debug_recent_posts(Context $ctx) {
 
 	$limit = 500;
 
-	$boards = listBoards();
+	$boards = listBoards($ctx->get(CacheDriver::class)());
 
 	// Manually build an SQL query
 	$query = 'SELECT * FROM (';
