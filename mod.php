@@ -4,6 +4,8 @@
  *  Copyright (c) 2010-2014 Tinyboard Development Group
  */
 
+use Vichan\AppContext;
+
 require_once 'inc/bootstrap.php';
 
 if ($config['debug'])
@@ -122,6 +124,9 @@ if (!$mod) {
 	exit;
 }
 
+$ctx = new AppContext($config);
+
+
 if (isset($config['mod']['custom_pages'])) {
 	$pages = array_merge($pages, $config['mod']['custom_pages']);
 }
@@ -183,6 +188,9 @@ foreach ($pages as $uri => $handler) {
 		if (is_array($matches)) {
 			// we don't want to call named parameters (PHP 8)
 			$matches = array_values($matches);
+			array_unshift($matches, $ctx);
+		} else {
+			$matches = [ $ctx, $matches ];
 		}
 
 		if (is_string($handler)) {
