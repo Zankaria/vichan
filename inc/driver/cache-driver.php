@@ -37,7 +37,7 @@ class CacheDrivers {
 				return $ret;
 			}
 
-			public function set(string $key, mixed $value, int|false $expires = false): void {
+			public function set(string $key, mixed $value, mixed $expires = false): void {
 				$this->inner->set($key, $value, (int)$expires);
 			}
 
@@ -78,7 +78,7 @@ class CacheDrivers {
 				return json_decode($ret, true);
 			}
 
-			public function set(string $key, mixed $value, int|false $expires = false): void {
+			public function set(string $key, mixed $value, mixed $expires = false): void {
 				if ($expires === false) {
 					$this->inner->set($this->prefix . $key, json_encode($value));
 				} else {
@@ -107,7 +107,7 @@ class CacheDrivers {
 				return $ret;
 			}
 
-			public function set(string $key, mixed $value, int|false $expires = false): void {
+			public function set(string $key, mixed $value, mixed $expires = false): void {
 				apcu_store($key, $value, (int)$expires);
 			}
 
@@ -158,7 +158,7 @@ class CacheDrivers {
 				return json_decode($data, true);
 			}
 
-			public function set(string $key, mixed $value, int|false $expires = false): void {
+			public function set(string $key, mixed $value, mixed $expires = false): void {
 				$key = str_replace('/', '::', $key);
 				$key = str_replace("\0", '', $key);
 				$key = $this->prefix . $key;
@@ -192,7 +192,7 @@ class CacheDrivers {
 				return isset(self::$inner[$key]) ? self::$inner[$key] : null;
 			}
 
-			public function set(string $key, mixed $value, int|false $expires = false): void {
+			public function set(string $key, mixed $value, mixed $expires = false): void {
 				self::$inner[$key] = $value;
 			}
 
@@ -215,7 +215,7 @@ class CacheDrivers {
 				return null;
 			}
 
-			public function set(string $key, mixed $value, int|false $expires = false): void {
+			public function set(string $key, mixed $value, mixed $expires = false): void {
 				// No-op.
 			}
 
@@ -244,11 +244,11 @@ interface CacheDriver {
 	 *
 	 * @param string $key The key.
 	 * @param mixed $value The value.
-	 * @param int|bool $expires After how many seconds the pair will expire. Use false or ignore this parameter to use the
-	 *                      default global config behavior. Some drivers will always ignore this parameter and store the
-	 *                      pair until it's removed.
+	 * @param int|false $expires After how many seconds the pair will expire. Use false or ignore this parameter to keep
+	 *                           the value until it gets evicted to make space for more items. Some drivers will always
+	 *                           ignore this parameter and store the pair until it's removed.
 	 */
-	public function set(string $key, mixed $value, int|false $expires = false): void;
+	public function set(string $key, mixed $value, mixed $expires = false): void;
 
 	/**
 	 * Delete a key-value pair.
