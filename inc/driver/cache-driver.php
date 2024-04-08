@@ -49,11 +49,11 @@ interface CacheDriver {
 	 *
 	 * @param string $key The key.
 	 * @param mixed $value The value.
-	 * @param int|bool $expires After how many seconds the pair will expire. Use false or ignore this parameter to use the
-	 *                      default global config behavior. Some drivers will always ignore this parameter and store the
-	 *                      pair until it's removed.
+	 * @param int|false $expires After how many seconds the pair will expire. Use false or ignore this parameter to keep
+	 *                           the value until it gets evicted to make space for more items. Some drivers will always
+	 *                           ignore this parameter and store the pair until it's removed.
 	 */
-	public function set(string $key, mixed $value, int|false $expires = false): void;
+	public function set(string $key, mixed $value, mixed $expires = false): void;
 
 	/**
 	 * Delete a key-value pair.
