@@ -82,6 +82,7 @@ class CacheDrivers {
 				if ($expires === false) {
 					$this->inner->set($this->prefix . $key, json_encode($value));
 				} else {
+					$expires = $expires * 1000; // Seconds to milliseconds.
 					$this->inner->setex($this->prefix . $key, $expires, json_encode($value));
 				}
 			}
