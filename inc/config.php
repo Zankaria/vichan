@@ -127,17 +127,25 @@
 
 	/*
 	 * On top of the static file caching system, you can enable the additional caching system which is
-	 * designed to minimize SQL queries and can significantly increase speed when posting or using the
-	 * moderator interface. APC is the recommended method of caching.
+	 * designed to minimize request processing can significantly increase speed when posting or using
+	 * the moderator interface.
 	 *
 	 * https://github.com/vichan-devel/vichan/wiki/cache
 	 */
 
+	// Uses either a PHP array or a WeakMap depending on the php version. MUST NOT be used in multiprocess environments.
 	$config['cache']['enabled'] = 'native';
+	// The recommended in-memory method of caching. Requires the extension. Due to how php-fpm works, this should be
+	// disabled when you run tools from the cli.
 	// $config['cache']['enabled'] = 'apcu';
+	// The Memcache server. Requires the memcached extension, with a final D.
 	// $config['cache']['enabled'] = 'memcached';
+	// The Redis server. Requires the extension.
 	// $config['cache']['enabled'] = 'redis';
+	// Use the local cache folder. Slower than native but available out of the box and compatible with multiprocess
+	// environments. You can mount a ram-based filesystem in the cache directory to improve performance.
 	// $config['cache']['enabled'] = 'fs';
+	// Technically available, offers a no-op fake cache. Don't use this outside of testing or debugging.
 	// $config['cache']['enabled'] = 'none';
 
 	// Timeout for cached objects such as posts and HTML.
