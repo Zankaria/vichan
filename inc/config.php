@@ -138,6 +138,7 @@
 	// $config['cache']['enabled'] = 'memcached';
 	// $config['cache']['enabled'] = 'redis';
 	// $config['cache']['enabled'] = 'fs';
+	// $config['cache']['enabled'] = 'none';
 
 	// Timeout for cached objects such as posts and HTML.
 	$config['cache']['timeout'] = 60 * 60 * 48; // 48 hours
