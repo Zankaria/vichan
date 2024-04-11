@@ -66,7 +66,8 @@ class WebDependencyFactory implements DependencyFactory {
 			case 'fs':
 				return CacheDrivers::filesystem(
 					$this->config['cache']['prefix'],
-					"/tmp/cache/{$this->config['cache']['prefix']}"
+					"/tmp/cache/{$this->config['cache']['prefix']}",
+					'.lock'
 				);
 			case 'none':
 				return CacheDrivers::none();
