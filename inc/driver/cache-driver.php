@@ -249,7 +249,7 @@ class CacheDrivers {
 			}
 
 			public function flush(): void {
-				self::$inner = array();
+				self::$inner = [];
 			}
 		};
 	}
