@@ -3,6 +3,8 @@ namespace Vichan\Driver;
 
 use RuntimeException;
 
+use const PHP_MAJOR_VERSION;
+
 defined('TINYBOARD') or exit;
 
 /**
