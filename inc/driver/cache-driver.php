@@ -192,7 +192,7 @@ class CacheDrivers {
 		};
 	}
 
-	public static function php_array() {
+	public static function phpArray() {
 		return new class implements CacheDriver {
 			private static array $inner = [];
 

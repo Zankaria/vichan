@@ -72,7 +72,7 @@ class WebDependencyFactory implements DependencyFactory {
 				return CacheDrivers::none();
 			case 'native':
 			default:
-				return CacheDrivers::isWeakMapAvailable() ? CacheDrivers::weakMap() : CacheDrivers::php_array();
+				return CacheDrivers::isWeakMapAvailable() ? CacheDrivers::weakMap() : CacheDrivers::phpArray();
 		}
 	}
 }
