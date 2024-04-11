@@ -2,6 +2,9 @@
 namespace Vichan\Driver;
 
 use RuntimeException;
+use WeakMap;
+
+use const PHP_MAJOR_VERSION;
 
 defined('TINYBOARD') or exit;
 
@@ -9,6 +12,10 @@ defined('TINYBOARD') or exit;
  * PHP has no nested or private classes support.
  */
 class CacheDrivers {
+	public static function isWeakMapAvailable() {
+		return PHP_MAJOR_VERSION >= 8;
+	}
+
 	public static function memcached(string $prefix, string $memcached_server) {
 		$memcached = new Memcached();
 		if (!$memcached->setOption(Memcached::OPT_BINARY_PROTOCOL, true)) {
@@ -188,6 +195,34 @@ class CacheDrivers {
 	public static function php_array() {
 		return new class implements CacheDriver {
 			private static array $inner = [];
+
+			public function get(string $key): mixed {
+				return isset(self::$inner[$key]) ? self::$inner[$key] : null;
+			}
+
+			public function set(string $key, mixed $value, mixed $expires = false): void {
+				self::$inner[$key] = $value;
+			}
+
+			public function delete(string $key): void {
+				unset(self::$inner[$key]);
+			}
+
+			public function flush(): void {
+				self::$inner = array();
+			}
+		};
+	}
+
+	public static function weakMap() {
+		return new class implements CacheDriver {
+			private static WeakMap $inner;
+
+			public function __construct() {
+				if (!isset(self::$inner)) {
+					self::$inner = new WeakMap();
+				}
+			}
 
 			public function get(string $key): mixed {
 				return isset(self::$inner[$key]) ? self::$inner[$key] : null;

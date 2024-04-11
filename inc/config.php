@@ -133,7 +133,7 @@
 	 * https://github.com/vichan-devel/vichan/wiki/cache
 	 */
 
-	$config['cache']['enabled'] = 'php';
+	$config['cache']['enabled'] = 'native';
 	// $config['cache']['enabled'] = 'apcu';
 	// $config['cache']['enabled'] = 'memcached';
 	// $config['cache']['enabled'] = 'redis';
