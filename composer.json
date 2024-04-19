@@ -35,6 +35,7 @@
             "inc/functions.php",
             "inc/driver/http-driver.php",
             "inc/driver/cache-driver.php",
+            "inc/driver/dns-driver.php",
             "inc/driver/log-driver.php",
             "inc/service/captcha-queries.php"
         ]
