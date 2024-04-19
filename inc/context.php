@@ -1,7 +1,8 @@
 <?php
 namespace Vichan;
 
-use Vichan\Driver\{CacheDriver, HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Driver\{CacheDriver, DnsDriver, DnsDrivers, HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Service\DnsQueries;
 
 defined('TINYBOARD') or exit;
 
@@ -9,7 +10,9 @@ defined('TINYBOARD') or exit;
 interface DependencyFactory {
 	public function buildLogDriver(): Log;
 	public function buildCacheDriver(): CacheDriver;
+	public function buildDnsDriver(): DnsDriver;
 	public function buildHttpDriver(): HttpDriver;
+	public function buildDnsQueries(DnsDriver $resolver, CacheDriver $cache): DnsQueries;
 }
 
 class WebDependencyFactory implements DependencyFactory {
@@ -39,6 +42,18 @@ class WebDependencyFactory implements DependencyFactory {
 		}
 	}
 
+	public function buildCacheDriver(): CacheDriver {
+		return \cache::getCache();
+	}
+
+	public function buildDnsDriver(): DnsDriver {
+		if ($this->config['dns_system']) {
+			return DnsDrivers::osResolver(1);
+		} else {
+			return DnsDrivers::host(1);
+		}
+	}
+
 	public function buildHttpDriver(): HttpDriver {
 		return HttpDrivers::getHttpDriver(
 			$this->config['upload_by_url_timeout'],
@@ -46,8 +61,14 @@ class WebDependencyFactory implements DependencyFactory {
 		);
 	}
 
-	public function buildCacheDriver(): CacheDriver {
-		return \cache::getCache();
+	public function buildDnsQueries(DnsDriver $resolver, CacheDriver $cache): DnsQueries {
+		return new DnsQueries(
+			$resolver,
+			$cache,
+			$this->config['dnsbl'],
+			$this->config['dnsbl_exceptions'],
+			$this->config['fcrdns']
+		);
 	}
 }
 
@@ -55,7 +76,9 @@ class Context {
 	private DependencyFactory $factory;
 	private ?Log $log;
 	private ?CacheDriver $cache;
+	private ?DnsDriver $resolver;
 	private ?HttpDriver $http;
+	private ?DnsQueries $dnsQueries;
 
 
 	public function __construct(DependencyFactory $factory) {
@@ -70,7 +93,18 @@ class Context {
 		return $this->cache ??= $this->factory->buildCacheDriver();
 	}
 
+	public function getDnsDriver(): DnsDriver {
+		return $this->resolver ??= $this->factory->buildDnsDriver();
+	}
+
 	public function getHttpDriver(): HttpDriver {
 		return $this->http ??= $this->factory->buildHttpDriver();
+	}
+
+	public function getDnsQueries(): DnsQueries {
+		return $this->dnsQueries ??= $this->factory->buildDnsQueries(
+			$this->getDnsDriver(),
+			$this->getCacheDriver()
+		);
 	}
 }
