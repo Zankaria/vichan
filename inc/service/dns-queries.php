@@ -109,11 +109,11 @@ class DnsQueries {
 	}
 
 	private function checkNameResolves($name): bool {
-		$value = $this->cache->get("dns_queries_check_name_$name");
+		$value = $this->cache->get("dns_queries_dns_$name");
 		if ($value === null) {
 			$value = (bool)$this->resolver->nameToIPs($name);
 			$serialized_value = $value ? self::CACHE_TRUE : self::CACHE_FALSE;
-			$this->cache->set("dns_queries_check_name_$name", $serialized_value, self::DNS_CACHE_TIMEOUT);
+			$this->cache->set("dns_queries_dns_$name", $serialized_value, self::DNS_CACHE_TIMEOUT);
 		}
 		return $value === self::CACHE_TRUE;
 	}
@@ -171,7 +171,7 @@ class DnsQueries {
 	 * This function can be slow since may validate the response.
 	 *
 	 * @param string $ip The ip to lookup.
-	 * @return array|false The hostnames of the given ip, false if none.
+	 * @return array|false The hostnames of the given ip.
 	 * @throws InvalidArgumentException Throws if $ip is not a valid IPv4 or IPv6 address.
 	 */
 	public function ipToNames(string $ip): array {
@@ -187,13 +187,13 @@ class DnsQueries {
 
 		$names = $this->resolver->IPToNames($ret);
 		if ($names === false) {
-			$this->cache->set("dns_queries_rdns_$ret", []);
-			return false;
+			$this->cache->set("dns_queries_rdns_$ret", [], self::DNS_CACHE_TIMEOUT);
+			return [];
 		}
 
 		// Do we bother with validating the result?
 		if (!$this->rdns_validate) {
-			$this->cache->set("dns_queries_rdns_$ret", $names);
+			$this->cache->set("dns_queries_rdns_$ret", $names, self::DNS_CACHE_TIMEOUT);
 			return $names;
 		}
 
@@ -207,7 +207,7 @@ class DnsQueries {
 			}
 		}
 
-		$this->cache->set("dns_queries_rdns_$ret", $acc);
+		$this->cache->set("dns_queries_rdns_$ret", $acc, self::DNS_CACHE_TIMEOUT);
 		return $acc;
 	}
 }
