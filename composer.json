@@ -37,7 +37,8 @@
             "inc/driver/cache-driver.php",
             "inc/driver/dns-driver.php",
             "inc/driver/log-driver.php",
-            "inc/service/captcha-queries.php"
+            "inc/service/captcha-queries.php",
+            "inc/service/dns-queries.php"
         ]
     },
     "license": "Tinyboard + vichan",
