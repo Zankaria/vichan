@@ -66,7 +66,7 @@ class DnsQueries {
 		return false;
 	}
 
-	private function isIPBlacklisted(string $ip, string $rip): bool {
+	private function isIPBlacklisted(string $ip, string $rip): string|false {
 		foreach ($this->blacklist_providers as $blacklist) {
 			$blacklist_host = $blacklist;
 			if (is_array($blacklist)) {
@@ -84,23 +84,23 @@ class DnsQueries {
 
 				if (!isset($blacklist[1])) {
 					// Just block them.
-					return true;
+					return $blacklist_host;
 				} elseif (is_array($blacklist[1])) {
 					// Check if the blacklist applies only to some IPs.
 					foreach ($blacklist[1] as $octet) {
 						if ($ip == $octet || $ip == '127.0.0.' . $octet) {
-							return true;
+							return $blacklist_host;
 						}
 					}
 				} elseif (is_callable($blacklist[1])) {
 					// Custom user provided function.
 					if ($blacklist[1]($ip)) {
-						return true;
+						return $blacklist_host;
 					}
 				} else {
 					// Check if the blacklist only applies to a specific IP.
 					if ($ip == $blacklist[1] || $ip == '127.0.0.' . $blacklist[1]) {
-						return true;
+						return $blacklist_host;
 					}
 				}
 			}
@@ -141,10 +141,10 @@ class DnsQueries {
 	 * Documentation: https://github.com/vichan-devel/vichan/wiki/dnsbl
 	 *
 	 * @param string $ip The ip to lookup.
-	 * @return bool Returns true if the IP is a in known blacklist.
+	 * @return string|false Returns the hit blacklist if the IP is a in known blacklist. False if the IP is not blacklisted.
 	 * @throws InvalidArgumentException Throws if $ip is not a valid IPv4 or IPv6 address.
 	 */
-	public function isSpamIP($ip): bool {
+	public function isSpamIP(string $ip): string|false {
 		$rip = false;
 		$ret = self::reverseIPv4Octets($ip);
 		if ($ret !== false) {
