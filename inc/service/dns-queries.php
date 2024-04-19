@@ -111,7 +111,7 @@ class DnsQueries {
 	private function checkNameResolves($name): bool {
 		$value = $this->cache->get("dns_queries_check_name_$name");
 		if ($value === null) {
-			$value = (bool)$this->resolver->name_to_ips($name);
+			$value = (bool)$this->resolver->nameToIPs($name);
 			$serialized_value = $value ? self::CACHE_TRUE : self::CACHE_FALSE;
 			$this->cache->set("dns_queries_check_name_$name", $serialized_value, self::DNS_CACHE_TIMEOUT);
 		}
@@ -182,7 +182,7 @@ class DnsQueries {
 
 		$name = $this->cache->get("dns_queries_rdns_$ret");
 		if ($name === null) {
-			$name = $this->resolver->ip_to_name($ret);
+			$name = $this->resolver->IPToNames($ret);
 			if ($name === false) {
 				return false;
 			}
@@ -193,7 +193,7 @@ class DnsQueries {
 			}
 
 			// Validate the response.
-			$resolved_ips = $this->resolver->name_to_ips($name);
+			$resolved_ips = $this->resolver->IPToNames($name);
 			if ($resolved_ips === false) {
 				// Could not resolve.
 				$this->cache->set("rdns_$ret", self::CACHE_FALSE, self::DNS_CACHE_TIMEOUT);

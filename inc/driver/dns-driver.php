@@ -14,7 +14,7 @@ class DnsDrivers {
 			 * For the love of god never use this.
 			 * https://www.php.net/manual/en/function.gethostbynamel.php#119535
 			 */
-			public function name_to_ips(string $name): array|false {
+			public function nameToIPs(string $name): array|false {
 				// Add a trailing dot to not return the loopback address on failure
 				// https://www.php.net/manual/en/function.gethostbynamel.php#119535
 				$ret = gethostbynamel("{$name}.");
@@ -28,7 +28,7 @@ class DnsDrivers {
 			 * For the love of god never use this.
 			 * https://www.php.net/manual/en/function.gethostbyaddr.php#57553
 			 */
-			public function ip_to_name(string $ip): array|false {
+			public function IPToNames(string $ip): array|false {
 				$ret = gethostbyaddr($ip);
 				if ($ret === $ip) {
 					return false;
@@ -43,7 +43,7 @@ class DnsDrivers {
 		return new class($timeout) implements DnsDriver {
 			private int $timeout;
 
-			private static function match_or(string $pattern, string $subject, mixed $default): array {
+			private static function matchOr(string $pattern, string $subject, mixed $default): array {
 				$ret = preg_match_all($pattern, $subject, $out);
 				if ($ret === false || $ret === 0) {
 					return $default;
@@ -55,14 +55,14 @@ class DnsDrivers {
 				$this->timeout = $timeout;
 			}
 
-			public function name_to_ips(string $name): array|false {
+			public function nameToIPs(string $name): array|false {
 				$ret = shell_exec_error("host -W {$this->timeout} {$name}");
 				if ($ret === false) {
 					return false;
 				}
 
-				$ipv4 = self::match_or('/has address ([^\s]+)$/', $ret, []);
-				$ipv6 = self::match_or('/has IPv6 address ([^\s]+)$/', $ret, []);
+				$ipv4 = self::matchOr('/has address ([^\s]+)$/', $ret, []);
+				$ipv6 = self::matchOr('/has IPv6 address ([^\s]+)$/', $ret, []);
 				$all_ip = array_merge($ipv4, $ipv6);
 
 				if (empty($all_ip)) {
@@ -71,13 +71,13 @@ class DnsDrivers {
 				return $all_ip;
 			}
 
-			public function ip_to_name(string $ip): array|false {
+			public function IPToNames(string $ip): array|false {
 				$ret = shell_exec_error("host -W {$this->timeout} {$ip}");
 				if ($ret === false) {
 					return false;
 				}
 
-				$names = self::match_or('/domain name pointer ([^\s]+)$/', $ret, false);
+				$names = self::matchOr('/domain name pointer ([^\s]+)$/', $ret, false);
 				if ($names === false) {
 					return false;
 				}
@@ -95,13 +95,13 @@ interface DnsDriver {
 	 * @param string $name Domain name.
 	 * @return array|false Returns an array of IPv4 and IPv6 addresses or false on error.
 	 */
-	public function name_to_ips(string $name): array|false;
+	public function nameToIPs(string $name): array|false;
 
 	/**
 	 * Resolve an ip address to a domain name.
 	 *
 	 * @param string $ip Ip address.
-	 * @return string|false Returns the domain name or false on error.
+	 * @return string|false Returns the domain names or false on error.
 	 */
-	public function ip_to_name(string $ip): array|false;
+	public function IPToNames(string $ip): array|false;
 }
