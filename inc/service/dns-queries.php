@@ -1,124 +1,72 @@
 <?php
+namespace Vichan\Service;
+
+use InvalidArgumentException;
+use Vichan\Driver\{DnsDriver, CacheDriver};
+use Lifo\IP\IP;
 
 defined('TINYBOARD') or exit;
 
-require_once('inc/driver/dns-driver.php');
-require_once('inc/driver/cache-driver.php');
-
 
 class DnsQueries {
-	const DNS_CACHE_TIMEOUT = 60 * 15; // 15 minutes.
+	private const DNS_CACHE_TIMEOUT = 60 * 15; // 15 minutes.
 
 	// Can't store booleans in the cache, since false is used to report a cache-miss.
-	const CACHE_FALSE = 0x00;
-	const CACHE_TRUE = 0x01;
+	private const CACHE_FALSE = 0x00;
+	private const CACHE_TRUE = 0x01;
 
-	private $resolver;
-	private $cache;
-	private $blacklist_providers;
-	private $exceptions;
+	private DnsDriver $resolver;
+	private CacheDriver $cache;
+	private array $blacklist_providers;
+	private array $exceptions;
+	private bool $rdns_validate;
 
 
-	private static function reverse_ipv4_octets($ip) {
+	private static function reverseIPv4Octets(string $ip): string|false {
+		$ret = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4);
+		if ($ret === false) {
+			return false;
+		}
 		return implode('.', array_reverse(explode('.', $ip)));
 	}
 
-	private static function reverse_ipv6_octets($ip) {
-		return strrev(implode(".", str_split(str_replace(':', '', $ip))));
-	}
-
-	private static function is_ipv4($ip) {
-		return strpos($ip, ':') === false;
-	}
-
-	/**
-	 * Expands any IP type. Does NOT perform input validation.
-	 * Adapted from: https://stackoverflow.com/a/58577916
-	 *
-	 * The ip is expanded inplace due to a PHP limitation of being unable to return multiple values.
-	 * @param string $ip
-	 * @return bool Returns if the address is an IPv6 address.
-	 */
-	private static function expand_ip_inplace(&$ip) {
-		if (self::is_ipv4($ip)) {
+	private static function reverseIPv6Octets(string $ip): string|false {
+		$ret = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6);
+		if ($ret === false) {
 			return false;
 		}
-
-		// Assume IPv6
-		$hex = bin2hex(inet_pton($ip));
-
-		if (str_starts_with($hex, '00000000000000000000ffff')) {
-			$ip = long2ip(hexdec(substr($hex, -8)));
-			return true;
-		} else {
-			// IPv4-mapped IPv6 addresses
-			$ip = implode(':', str_split($hex, 4));
-			return false;
-		}
+		return strrev(implode(".", str_split(str_replace(':', '', IP::inet_expand($ip)))));
 	}
 
 	/**
 	 * Builds the name/host to resolve to discover if an ip is the host.
 	 */
-	private static function build_endpoint($host, $ip) {
-		$lookup = str_replace('%', $ip, $host);
-		if ($lookup === $host) {
-			$lookup = $ip . '.' . $host;
+	private static function buildEndpoint(string $host, string $ip) {
+		$replaced = 0;
+		$lookup = str_replace('%', $ip, $host, $replaced);
+		if ($replaced === 0) {
+			$lookup = "$ip.$host";
 		}
 		return $lookup;
 	}
 
-	private function check_name_blacklisted($name) {
-		$value = $this->cache->get("dns_spam_name_$name");
-		if ($value === false) {
-			$value = (bool)$this->resolver->name_to_ips($name);
-			$serialized_value = $value ? self::CACHE_TRUE : self::CACHE_FALSE;
-			$this->cache->set("dns_spam_name_$name", $serialized_value, self::DNS_CACHE_TIMEOUT);
-		}
-		return $value === self::CACHE_TRUE;
+	private static function filterIp(string $str): string|false {
+		return filter_var($str, FILTER_VALIDATE_IP);
 	}
 
-
-	/**
-	 * Build a DNS accessor.
-	 *
-	 * @param DnsDriver $resolver DNS driver.
-	 * @param CacheDriver $cache Cache driver.
-	 * @param array $blacklists Array of blacklist providers.
-	 * @param array $exceptions Exceptions to the blacklists.
-	 */
-	function __construct($resolver, $cache, $blacklist_providers, $exceptions) {
-		$this->resolver = $resolver;
-		$this->cache = $cache;
-		$this->blacklist_providers = $blacklist_providers;
-		$this->exceptions = $exceptions;
-	}
-
-	/**
-	 * Is the given IP known to a blacklist?
-	 * Documentation: https://github.com/vichan-devel/vichan/wiki/dnsbl
-	 *
-	 * @param string $ip The ip to lookup. The ip is NOT validated.
-	 * @return bool Returns true if the IP is a in known blacklist.
-	 */
-	public function is_spam_ip($ip) {
-		$is_ipv6 = self::expand_ip_inplace($ip);
-
+	private function isIPWhitelisted(string $ip): bool {
 		if (in_array($ip, $this->exceptions)) {
-			return false;
+			return true;
 		}
 
-		if (preg_match("/^(::(ffff:)?)?(127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|0\.|255\.)/", $ip)) {
-			// It's pointless to check for local IP addresses in dnsbls, isn't it?
-			return false;
+		if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+			return true;
 		}
 
-		if ($is_ipv6) {
-			$ip = self::reverse_ipv6_octets($ip);
-		} else {
-			$ip = self::reverse_ipv4_octets($ip);
-		}
+		return false;
+	}
 
+	private function isIPBlacklisted(string $ip, string $rip): bool {
 		foreach ($this->blacklist_providers as $blacklist) {
 			$blacklist_host = $blacklist;
 			if (is_array($blacklist)) {
@@ -126,10 +74,10 @@ class DnsQueries {
 			}
 
 			// The name that will be looked up.
-			$name = self::build_endpoint($blacklist_host, $ip);
+			$name = self::buildEndpoint($blacklist_host, $rip);
 
 			// Do the actual check.
-			$is_blacklisted = $this->check_name_blacklisted($name);
+			$is_blacklisted = $this->checkNameResolves($name);
 
 			if ($is_blacklisted) {
 				// Pick the strategy to deal with this blacklisted host.
@@ -157,30 +105,98 @@ class DnsQueries {
 				}
 			}
 		}
-
 		return false;
+	}
+
+	private function checkNameResolves($name): bool {
+		$value = $this->cache->get("dns_queries_check_name_$name");
+		if ($value === null) {
+			$value = (bool)$this->resolver->name_to_ips($name);
+			$serialized_value = $value ? self::CACHE_TRUE : self::CACHE_FALSE;
+			$this->cache->set("dns_queries_check_name_$name", $serialized_value, self::DNS_CACHE_TIMEOUT);
+		}
+		return $value === self::CACHE_TRUE;
+	}
+
+
+	/**
+	 * Build a DNS accessor.
+	 *
+	 * @param DnsDriver $resolver DNS driver.
+	 * @param CacheDriver $cache Cache driver.
+	 * @param array $blacklists Array of blacklist providers.
+	 * @param array $exceptions Exceptions to the blacklists.
+	 * @param bool $rdns_validate Validate Reverse DNS queries results.
+	 */
+	public function __construct(DnsDriver $resolver, CacheDriver $cache, array $blacklist_providers, array $exceptions, bool $rdns_validate) {
+		$this->resolver = $resolver;
+		$this->cache = $cache;
+		$this->blacklist_providers = $blacklist_providers;
+		$this->exceptions = $exceptions;
+		$this->rdns_validate = $rdns_validate;
+	}
+
+	/**
+	 * Is the given IP known to a blacklist?
+	 * Documentation: https://github.com/vichan-devel/vichan/wiki/dnsbl
+	 *
+	 * @param string $ip The ip to lookup.
+	 * @return bool Returns true if the IP is a in known blacklist.
+	 * @throws InvalidArgumentException Throws if $ip is not a valid IPv4 or IPv6 address.
+	 */
+	public function isSpamIP($ip): bool {
+		$rip = false;
+		$ret = self::reverseIPv4Octets($ip);
+		if ($ret !== false) {
+			$rip = $ret;
+		}
+		$ret = self::reverseIPv6Octets($ip);
+		if ($ret !== false) {
+			$rip = $ret;
+		}
+
+		if ($rip === false) {
+			throw new InvalidArgumentException("$ip is not a valid ip address.");
+		}
+
+		if ($this->isIPWhitelisted($ip)) {
+			return false;
+		}
+
+		return $this->isIPBlacklisted($ip, $rip);
 	}
 
 	/**
 	 * Performs the Reverse DNS lookup (rDNS) of the given IP.
-	 * This function can be slow since it always validates the response.
+	 * This function can be slow since may validate the response.
 	 *
 	 * @param string $ip The ip to lookup.
 	 * @return string|false The hostname of the given ip, false if none.
+	 * @throws InvalidArgumentException Throws if $ip is not a valid IPv4 or IPv6 address.
 	 */
-	public function ip_to_name($ip) {
-		$name = $this->cache->get("rdns_$ip");
-		if ($name === false) {
-			$name = $this->resolver->ip_to_name($ip);
+	public function ipToName(string $ip) {
+		$ret = self::filterIp($ip);
+		if ($ret === false) {
+			throw new InvalidArgumentException("$ip is not a valid ip address.");
+		}
+
+		$name = $this->cache->get("dns_queries_rdns_$ret");
+		if ($name === null) {
+			$name = $this->resolver->ip_to_name($ret);
 			if ($name === false) {
 				return false;
 			}
 
+			// Do we bother with validating the result?
+			if (!$this->rdns_validate) {
+				return $name;
+			}
+
 			// Validate the response.
 			$resolved_ips = $this->resolver->name_to_ips($name);
-			if (!is_array($resolved_ips)) {
+			if ($resolved_ips === false) {
 				// Could not resolve.
-				$this->cache->set("rdns_$ip", self::CACHE_FALSE, self::DNS_CACHE_TIMEOUT);
+				$this->cache->set("rdns_$ret", self::CACHE_FALSE, self::DNS_CACHE_TIMEOUT);
 				return false;
 			} else {
 				// The name resolves to something.
@@ -189,8 +205,8 @@ class DnsQueries {
 				}
 
 				// But does it resolve to the given ip?
-				if (!in_array($ip, $resolved_ips)) {
-					$this->cache->set("rdns_$ip", self::CACHE_FALSE, self::DNS_CACHE_TIMEOUT);
+				if (!in_array($ret, $resolved_ips)) {
+					$this->cache->set("rdns_$ret", self::CACHE_FALSE, self::DNS_CACHE_TIMEOUT);
 					return false;
 				}
 				return $name;
