@@ -101,7 +101,7 @@ interface DnsDriver {
 	 * Resolve an ip address to a domain name.
 	 *
 	 * @param string $ip Ip address.
-	 * @return string|false Returns the domain names or false on error.
+	 * @return array|false Returns the domain names or false on error.
 	 */
 	public function IPToNames(string $ip): array|false;
 }
