@@ -1,7 +1,7 @@
 <?php
 namespace Vichan;
 
-use Vichan\Driver\{CacheDriver, CacheDrivers, HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Driver\{CacheDriver, CacheDrivers, DnsDriver, DnsDrivers, HttpDriver, HttpDrivers, Log, LogDrivers};
 
 defined('TINYBOARD') or exit;
 
@@ -9,6 +9,7 @@ defined('TINYBOARD') or exit;
 interface DependencyFactory {
 	public function buildLogDriver(): Log;
 	public function buildCacheDriver(): CacheDriver;
+	public function buildDnsDriver(): DnsDriver;
 	public function buildHttpDriver(): HttpDriver;
 }
 
@@ -41,6 +42,14 @@ class WebDependencyFactory implements DependencyFactory {
 
 	public function buildCacheDriver(): CacheDriver {
 		return CacheDrivers::mockery();
+	}
+
+	public function buildDnsDriver(): DnsDriver {
+		if ($this->config['dns_system']) {
+			return DnsDrivers::osResolver(1);
+		} else {
+			return DnsDrivers::host(1);
+		}
 	}
 
 	public function buildHttpDriver(): HttpDriver {
