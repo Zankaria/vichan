@@ -358,7 +358,10 @@ if (isset($_POST['delete'])) {
 		}
 	}
 
-	checkDNSBL();
+	$blacklist = $context->getDnsQueries()->isSpamIP($_SERVER['REMOTE_ADDR']);
+	if ($blacklist !== false) {
+		error(sprintf($config['error']['dnsbl'], $blacklist));
+	}
 
 	// Check if board exists
 	if (!openBoard($_POST['board']))
@@ -451,7 +454,10 @@ if (isset($_POST['delete'])) {
 		}
 	}
 
-	checkDNSBL();
+	$blacklist = $context->getDnsQueries()->isSpamIP($_SERVER['REMOTE_ADDR']);
+	if ($blacklist !== false) {
+		error(sprintf($config['error']['dnsbl'], $blacklist));
+	}
 
 	// Check if board exists
 	if (!openBoard($_POST['board']))
@@ -652,7 +658,10 @@ if (isset($_POST['delete'])) {
 			(!isset($_SERVER['HTTP_REFERER']) || !preg_match($config['referer_match'], rawurldecode($_SERVER['HTTP_REFERER']))))
 			error($config['error']['referer']);
 
-		checkDNSBL();
+		$blacklist = $context->getDnsQueries()->isSpamIP($_SERVER['REMOTE_ADDR']);
+		if ($blacklist !== false) {
+			error(sprintf($config['error']['dnsbl'], $blacklist));
+		}
 
 
 		if ($post['mod'] = isset($_POST['mod']) && $_POST['mod']) {

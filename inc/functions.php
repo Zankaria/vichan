@@ -1884,57 +1884,6 @@ function buildJavascript() {
 	file_write($config['file_script'], $script);
 }
 
-function checkDNSBL() {
-	global $config;
-
-	if (isIPv6())
-		return; // No IPv6 support yet.
-
-	if (!isset($_SERVER['REMOTE_ADDR']))
-		return; // Fix your web server configuration
-
-	if (preg_match("/^(::(ffff:)?)?(127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|0\.|255\.)/", $_SERVER['REMOTE_ADDR']))
-		return; // It's pointless to check for local IP addresses in dnsbls, isn't it?
-
-	if (in_array($_SERVER['REMOTE_ADDR'], $config['dnsbl_exceptions']))
-		return;
-
-	$ipaddr = ReverseIPOctets($_SERVER['REMOTE_ADDR']);
-
-	foreach ($config['dnsbl'] as $blacklist) {
-		if (!is_array($blacklist))
-			$blacklist = array($blacklist);
-
-		if (($lookup = str_replace('%', $ipaddr, $blacklist[0])) == $blacklist[0])
-			$lookup = $ipaddr . '.' . $blacklist[0];
-
-		if (!$ip = DNS($lookup))
-			continue; // not in list
-
-		$blacklist_name = isset($blacklist[2]) ? $blacklist[2] : $blacklist[0];
-
-		if (!isset($blacklist[1])) {
-			// If you're listed at all, you're blocked.
-			error(sprintf($config['error']['dnsbl'], $blacklist_name));
-		} elseif (is_array($blacklist[1])) {
-			foreach ($blacklist[1] as $octet) {
-				if ($ip == $octet || $ip == '127.0.0.' . $octet)
-					error(sprintf($config['error']['dnsbl'], $blacklist_name));
-			}
-		} elseif (is_callable($blacklist[1])) {
-			if ($blacklist[1]($ip))
-				error(sprintf($config['error']['dnsbl'], $blacklist_name));
-		} else {
-			if ($ip == $blacklist[1] || $ip == '127.0.0.' . $blacklist[1])
-				error(sprintf($config['error']['dnsbl'], $blacklist_name));
-		}
-	}
-}
-
-function isIPv6() {
-	return strstr($_SERVER['REMOTE_ADDR'], ':') !== false;
-}
-
 function ReverseIPOctets($ip) {
 	return implode('.', array_reverse(explode('.', $ip)));
 }
