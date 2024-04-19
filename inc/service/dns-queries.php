@@ -171,50 +171,43 @@ class DnsQueries {
 	 * This function can be slow since may validate the response.
 	 *
 	 * @param string $ip The ip to lookup.
-	 * @return string|false The hostname of the given ip, false if none.
+	 * @return array|false The hostnames of the given ip, false if none.
 	 * @throws InvalidArgumentException Throws if $ip is not a valid IPv4 or IPv6 address.
 	 */
-	public function ipToName(string $ip) {
+	public function ipToNames(string $ip): array {
 		$ret = self::filterIp($ip);
 		if ($ret === false) {
 			throw new InvalidArgumentException("$ip is not a valid ip address.");
 		}
 
-		$name = $this->cache->get("dns_queries_rdns_$ret");
-		if ($name === null) {
-			$name = $this->resolver->IPToNames($ret);
-			if ($name === false) {
-				return false;
-			}
-
-			// Do we bother with validating the result?
-			if (!$this->rdns_validate) {
-				return $name;
-			}
-
-			// Validate the response.
-			$resolved_ips = $this->resolver->IPToNames($name);
-			if ($resolved_ips === false) {
-				// Could not resolve.
-				$this->cache->set("rdns_$ret", self::CACHE_FALSE, self::DNS_CACHE_TIMEOUT);
-				return false;
-			} else {
-				// The name resolves to something.
-				foreach ($resolved_ips as $resolved_ip) {
-					$this->cache->set("rdns_$resolved_ip", $name, self::DNS_CACHE_TIMEOUT);
-				}
-
-				// But does it resolve to the given ip?
-				if (!in_array($ret, $resolved_ips)) {
-					$this->cache->set("rdns_$ret", self::CACHE_FALSE, self::DNS_CACHE_TIMEOUT);
-					return false;
-				}
-				return $name;
-			}
-		} elseif ($name === self::CACHE_FALSE) {
-			return false;
-		} else {
-			return $name;
+		$names = $this->cache->get("dns_queries_rdns_$ret");
+		if ($names !== false) {
+			return $names;
 		}
+
+		$names = $this->resolver->IPToNames($ret);
+		if ($names === false) {
+			$this->cache->set("dns_queries_rdns_$ret", []);
+			return false;
+		}
+
+		// Do we bother with validating the result?
+		if (!$this->rdns_validate) {
+			$this->cache->set("dns_queries_rdns_$ret", $names);
+			return $names;
+		}
+
+		// Filter out the names that do not resolve to the given ip.
+		$acc = [];
+		foreach ($names as $name) {
+			// Validate the response.
+			$resolved_ips = $this->resolver->nameToIPs($name);
+			if ($resolved_ips !== false && is_array($ret, $resolved_ips)) {
+				$acc[] = $name;
+			}
+		}
+
+		$this->cache->set("dns_queries_rdns_$ret", $acc);
+		return $acc;
 	}
 }
