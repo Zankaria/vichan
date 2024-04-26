@@ -3,6 +3,7 @@
 /*
  *  Copyright (c) 2010-2013 Tinyboard Development Group
  */
+use Vichan\Driver\{CacheDrivers, CacheDriver};
 
 use Vichan\Data\Driver\{CacheDriver, ApcuCacheDriver, ArrayCacheDriver, FsCacheDriver, MemcacheCacheDriver, NoneCacheDriver, RedisCacheDriver};
 
