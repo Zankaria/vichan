@@ -47,34 +47,7 @@ class WebDependencyFactory implements DependencyFactory {
 	}
 
 	public function buildCacheDriver(): CacheDriver {
-		switch ($this->config['cache']['enabled']) {
-			case 'memcached':
-				return CacheDrivers::memcached(
-					$this->config['cache']['prefix'],
-					$this->config['cache']['memcached']
-				);
-			case 'redis':
-				return CacheDrivers::redis(
-					$this->config['cache']['prefix'],
-					$this->config['cache']['redis'][0],
-					$this->config['cache']['redis'][1],
-					$this->config['cache']['redis'][2],
-					$this->config['cache']['redis'][3]
-				);
-			case 'apcu':
-				return CacheDrivers::apcu();
-			case 'fs':
-				return CacheDrivers::filesystem(
-					$this->config['cache']['prefix'],
-					"/tmp/cache/{$this->config['cache']['prefix']}",
-					'.lock'
-				);
-			case 'none':
-				return CacheDrivers::none();
-			case 'native':
-			default:
-				return CacheDrivers::isWeakMapAvailable() ? CacheDrivers::weakMap() : CacheDrivers::phpArray();
-		}
+		return \cache::getCache();
 	}
 }
 
