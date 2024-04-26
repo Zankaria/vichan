@@ -7,8 +7,6 @@ use Vichan\Driver\{CacheDrivers, CacheDriver};
 
 defined('TINYBOARD') or exit;
 
-require_once('inc/data/twig-cache.php');
-
 
 class Cache {
 	private static function buildCache(): CacheDriver {

@@ -1,7 +1,7 @@
 <?php
 namespace Vichan;
 
-use Vichan\Driver\{CacheDriver, CacheDrivers, HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Driver\{CacheDriver, HttpDriver, HttpDrivers, Log, LogDrivers};
 
 defined('TINYBOARD') or exit;
 
@@ -67,7 +67,7 @@ class Context {
 	}
 
 	public function getCacheDriver(): CacheDriver {
-		return $this->lazyGet($this->cache, 'cacheDriver');
+		return $this->cache ?? $this->factory->buildCacheDriver();
 	}
 
 	public function getHttpDriver(): HttpDriver {
