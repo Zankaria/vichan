@@ -85,6 +85,9 @@
 	// Requires safe_mode to be disabled.
 	$config['dns_system'] = false;
 
+	// DNS timeout in seconds. Best effort only.
+	$config['dns_system_timeout'] = 1;
+
 	// Check validity of the reverse DNS of IP addresses. Highly recommended.
 	$config['fcrdns'] = true;
 

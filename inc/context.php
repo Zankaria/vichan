@@ -47,10 +47,11 @@ class WebDependencyFactory implements DependencyFactory {
 	}
 
 	public function buildDnsDriver(): DnsDriver {
+		$timeout = $this->config['dns_system_timeout'];
 		if ($this->config['dns_system']) {
-			return DnsDrivers::osResolver(1);
+			return DnsDrivers::osResolver($timeout);
 		} else {
-			return DnsDrivers::host(1);
+			return DnsDrivers::host($timeout);
 		}
 	}
 
