@@ -862,8 +862,10 @@ function mod_page_ip(Context $ctx, $cip) {
 	$args['ip'] = $ip;
 	$args['posts'] = array();
 
-	if ($config['mod']['dns_lookup'] && empty($config['ipcrypt_key']))
-		$args['hostname'] = rDNS($ip);
+	if ($config['mod']['dns_lookup'] && empty($config['ipcrypt_key'])) {
+		$ret = $ctx->getDnsQueries()->ipToNames($ip);
+		$args['hostname'] = $ret !== false ? $ret[0] : '<none>';
+	}
 
 	$boards = listBoards($ctx->getCacheDriver());
 	foreach ($boards as $board) {
