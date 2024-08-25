@@ -16,121 +16,11 @@
 (function() {
 	var settings = new script_settings('quick-reply');
 
-	var do_css = function() {
-		$('#quick-reply-css').remove();
-
-		// Find background of reply posts
-		var dummy_reply = $('<div class="post reply"></div>').appendTo($('body'));
-		var reply_background = dummy_reply.css('backgroundColor');
-		var reply_border_style = dummy_reply.css('borderStyle');
-		var reply_border_color = dummy_reply.css('borderColor');
-		var reply_border_width = dummy_reply.css('borderWidth');
-		dummy_reply.remove();
-
-		$('<style type="text/css" id="quick-reply-css">\
-		#quick-reply {\
-			position: fixed;\
-			right: 5%;\
-			top: 5%;\
-			float: right;\
-			display: block;\
-			padding: 0 0 0 0;\
-			width: 300px;\
-			z-index: 100;\
-		}\
-		#quick-reply table {\
-			border-collapse: collapse;\
-			background: ' + reply_background + ';\
-			border-style: ' + reply_border_style + ';\
-			border-width: ' + reply_border_width + ';\
-			border-color: ' + reply_border_color + ';\
-			margin: 0;\
-			width: 100%;\
-		}\
-		#quick-reply tr td:nth-child(2) {\
-			white-space: nowrap;\
-			text-align: right;\
-			padding-right: 4px;\
-		}\
-		#quick-reply tr td:nth-child(2) input[type="submit"] {\
-			width: 100%;\
-		}\
-		#quick-reply th, #quick-reply td {\
-			margin: 0;\
-			padding: 0;\
-		}\
-		#quick-reply th {\
-			text-align: center;\
-			padding: 2px 0;\
-			border: 1px solid #222;\
-		}\
-		#quick-reply th .handle {\
-			float: left;\
-			width: 100%;\
-			display: inline-block;\
-		}\
-		#quick-reply th .close-btn {\
-			float: right;\
-			padding: 0 5px;\
-		}\
-		#quick-reply input[type="text"], #quick-reply select {\
-			width: 100%;\
-			padding: 2px;\
-			font-size: 10pt;\
-			box-sizing: border-box;\
-			-webkit-box-sizing:border-box;\
-			-moz-box-sizing: border-box;\
-		}\
-		#quick-reply textarea {\
-			width: 100%;\
-			min-width: 100%;\
-			box-sizing: border-box;\
-			-webkit-box-sizing:border-box;\
-			-moz-box-sizing: border-box;\
-			font-size: 10pt;\
-			resize: vertical horizontal;\
-		}\
-		#quick-reply input, #quick-reply select, #quick-reply textarea {\
-			margin: 0 0 1px 0;\
-		}\
-		#quick-reply input[type="file"] {\
-			padding: 5px 2px;\
-		}\
-		#quick-reply .nonsense {\
-			display: none;\
-		}\
-		#quick-reply td.submit {\
-			width: 1%;\
-		}\
-		#quick-reply td.recaptcha {\
-			text-align: center;\
-			padding: 0 0 1px 0;\
-		}\
-		#quick-reply td.recaptcha span {\
-			display: inline-block;\
-			width: 100%;\
-			background: white;\
-			border: 1px solid #ccc;\
-			cursor: pointer;\
-		}\
-		#quick-reply td.recaptcha-response {\
-			padding: 0 0 1px 0;\
-		}\
-		@media screen and (max-width: 400px) {\
-			#quick-reply {\
-				display: none !important;\
-			}\
-		}\
-		</style>').appendTo($('head'));
-	};
-
 	var show_quick_reply = function(){
 		if($('div.banner').length == 0)
 			return;
 		if($('#quick-reply').length != 0)
 			return;
-
-		do_css();
 
 		var $postForm = $('form[name="post"]').clone();
 
@@ -374,13 +264,6 @@
 			} else {
 				$postForm.show();
 			}
-
-			$(window).on('stylesheet', function() {
-				do_css();
-				if ($('link#stylesheet').attr('href')) {
-					$('link#stylesheet')[0].onload = do_css;
-				}
-			});
 		});
 	};
 
