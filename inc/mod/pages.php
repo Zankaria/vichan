@@ -11,11 +11,11 @@ defined('TINYBOARD') or exit;
 
 
 function _link_or_copy(string $target, string $link): bool {
-    if (!link($target, $link)) {
-        error_log("Failed to link() $target to $link. Falling back to copy()");
-        return copy($target, $link);
-    }
-    return true;
+	if (!link($target, $link)) {
+		error_log("Failed to link() $target to $link. Falling back to copy()");
+		return copy($target, $link);
+	}
+	return true;
 }
 
 function mod_page($title, $template, $args, $subtitle = false) {
