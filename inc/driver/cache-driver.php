@@ -186,13 +186,25 @@ class CacheDrivers {
 				$data = stream_get_contents($fd);
 				fclose($fd);
 				$this->unlockCache();
-				return json_decode($data, true);
+				$wrapped = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
+
+				if ($wrapped['expires'] !== false && $wrapped['expires'] <= time()) {
+					// Already, expired, pretend it doesn't exist.
+					return null;
+				} else {
+					return $wrapped['inner'];
+				}
 			}
 
 			public function set(string $key, mixed $value, mixed $expires = false): void {
 				$key = $this->prepareKey($key);
 
-				$data = json_encode($value);
+				$wrapped = [
+					'expires' => $expires ? time() + $expires : false,
+					'inner' => $value
+				];
+
+				$data = json_encode($wrapped);
 				$this->exclusiveLockCache();
 				file_put_contents($this->base_path . $key, $data);
 				$this->unlockCache();
