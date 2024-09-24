@@ -846,16 +846,12 @@
 	/*
 	 * Thumbnailing method:
 	 *
-	 *   'gd'		   PHP GD (default). Only handles the most basic image formats (GIF, JPEG, PNG).
-	 *				  GD is a prerequisite for vichan no matter what method you choose.
-	 *
-	 *   'imagick'	  PHP's ImageMagick bindings. Fast and efficient, supporting many image formats.
-	 *				  A few minor bugs. http://pecl.php.net/package/imagick
+	 *   'gd'		  PHP GD (default). GD is a prerequisite for vichan no matter what method you choose.
 	 *
 	 *   'convert'	  The command line version of ImageMagick (`convert`). Fixes most of the bugs in
 	 *				  PHP Imagick. `convert` produces the best still thumbnails and is highly recommended.
 	 *
-	 *   'gm'		   GraphicsMagick (`gm`) is a fork of ImageMagick with many improvements. It is more
+	 *   'gm'		  GraphicsMagick (`gm`) is a fork of ImageMagick with many improvements. It is more
 	 *				  efficient and gets thumbnailing done using fewer resources.
 	 *
 	 *   'convert+gifscale'
