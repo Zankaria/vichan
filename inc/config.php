@@ -933,10 +933,6 @@
 	// Location of thumbnail to use for deleted images.
 	$config['image_deleted'] = 'static/deleted.png';
 
-	// When a thumbnailed image is going to be the same (in dimension), just copy the entire file and use
-	// that as a thumbnail instead of resizing/redrawing.
-	$config['minimum_copy_resize'] = false;
-
 	// Maximum image upload size in bytes.
 	$config['max_filesize'] = 10 * 1024 * 1024; // 10MB
 	// Maximum image dimensions.
