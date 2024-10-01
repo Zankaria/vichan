@@ -6,6 +6,151 @@
 
 defined('TINYBOARD') or exit;
 
+class ImageFileProfile {
+	public const FORMAT_JPG = 0x1;
+	public const FORMAT_PNG = 0x2;
+	public const FORMAT_GIF = 0x3;
+	public const FORMAT_WEBP = 0x4;
+	public const FORMAT_BMP = 0x5;
+
+	public int $width;
+	public int $height;
+	public int $byteSize;
+	public int $format;
+	public string $file_path;
+	public mixed $handle;
+}
+
+interface ImageFileManipulatorImpl {
+	public function makeProfile(string $image_file_path, int $expected_format): ImageFileProfile;
+
+	public function copyResizeInto(ImageFileProfile $profile, int $target_width, int $target_height, string $target_file_path, int $target_format): mixed;
+
+	public function closeProfile(ImageFileProfile $profile): void;
+}
+
+class ImageFileManipulatorGD implements ImageFileManipulatorImpl {
+	public function makeProfile(string $image_file_path, int $expected_format): ImageFileProfile {
+		switch ($expected_format) {
+			case ImageFileProfile::FORMAT_JPG:
+				$ret = \createimagefromjpeg($image_file_path);
+				break;
+			case ImageFileProfile::FORMAT_PNG:
+				$ret = \createimagefrompng($image_file_path);
+				break;
+			case ImageFileProfile::FORMAT_GIF:
+				$ret = \createimagefromgif($image_file_path);
+				break;
+			case ImageFileProfile::FORMAT_WEBP:
+				$ret = \createimagefromwebp($image_file_path);
+				break;
+			case ImageFileProfile::FORMAT_BMP:
+				$ret = \createimagefrombmp($image_file_path);
+				break;
+			default:
+				throw new RuntimeException('Unknown image format');
+		}
+
+		if ($ret === false) {
+			throw new RuntimeException('Unable to open image');
+		}
+
+		$p = new ImageFileProfile();
+		$p->width = \imagesx($ret);
+		$p->height= \imagesy($ret);
+		$stat = \stat($image_file_path);
+		if ($stat === false || !isset($stat['size'])) {
+			throw new RuntimeException('Could not extract image byte size');
+		}
+		$p->byteSize = $stat['size'];
+		$p->format = $expected_format;
+		$p->file_path = $image_file_path;
+		$p->handle = $ret;
+
+		return $p;
+	}
+
+	public function copyResizeInto(ImageFileProfile $profile, int $target_width, int $target_height, string $target_file_path, int $target_format): void {
+		$other = \imagecreatetruecolor($target_width, $target_height);
+		if ($other === false) {
+			throw new RuntimeException('Could not create resize image');
+		}
+		if (!\imagecopyresampled($other, $profile->handle, 0, 0, 0, 0, $target_width, $target_height, $profile->width, $profile->height)) {
+			throw new RuntimeException('Could not resize image');
+		}
+
+		// Save
+		$ret = false;
+		switch ($target_format) {
+			case ImageFileProfile::FORMAT_JPG:
+				$ret = \imagejpeg($profile->handle, $target_file_path);
+			case ImageFileProfile::FORMAT_PNG:
+				$ret = \imagepng($profile->handle, $target_file_path);
+			case ImageFileProfile::FORMAT_GIF:
+				$ret = \imagegif($profile->handle, $target_file_path);
+			case ImageFileProfile::FORMAT_WEBP:
+				$ret = \imagewebp($profile->handle, $target_file_path);
+			case ImageFileProfile::FORMAT_BMP:
+				$ret = \imagebmp($profile->handle, $target_file_path);
+			default:
+				throw new RuntimeException('Unknown image format');
+		}
+
+		if ($ret === false) {
+			throw new RuntimeException('Could not save image');
+		}
+	}
+
+	public function closeProfile(ImageFileProfile $profile): void {
+		\imagedestroy($profile->handle);
+	}
+}
+
+class ImageFileManipulatorExec implements ImageFileManipulatorImpl {
+	public function makeProfile(string $image_file_path, int $expected_format): ImageFileProfile;
+
+	public function copyResizeInto(ImageFileProfile $profile, int $target_width, int $target_height, string $target_file_path, int $target_format): mixed;
+
+	public function closeProfile(ImageFileProfile $profile): void;
+}
+
+class ImageFileManipulator {
+	private ImageFileManipulatorImpl $gen_impl;
+	private ImageFileManipulatorImpl $gif_impl;
+
+	public function __construct(ImageFileManipulatorImpl $gen_impl, ImageFileManipulatorImpl $gif_impl) {
+		$this->gen_impl = $gen_impl;
+		$this->gif_impl = $gif_impl;
+	}
+
+	public function makeProfile(string $image_file_path, int $expected_format): ImageFileProfile {
+		$impl = $expected_format === ImageFileProfile::FORMAT_GIF ? $this->gif_impl : $this->gen_impl;
+		return $impl->makeProfile($image_file_path, $expected_format);
+	}
+
+	public function copyResizeInto(ImageFileProfile $profile, int $target_width, int $target_height, string $target_file_path, int $target_format): void {
+		if ($profile->width <= $target_width && $profile->height <= $target_width && $profile->format == $target_format) {
+			// File is smaller or equal fast path.
+			$ret = \Vichan\Functions\Fs\link_or_copy($profile->file_path, $target_file_path);
+			if (!$ret) {
+				throw new RuntimeException('Could not copy image');
+			}
+		} else {
+			$impl = $profile->format === ImageFileProfile::FORMAT_GIF ? $this->gif_impl : $this->gen_impl;
+			$impl->copyResizeInto($profile, $target_width, $target_height, $target_file_path, $target_format);
+		}
+	}
+
+	public function closeProfile(ImageFileProfile $profile): void {
+		$impl = $profile->format === ImageFileProfile::FORMAT_GIF ? $this->gif_impl : $this->gen_impl;
+		$impl->closeProfile($profile);
+	}
+}
+
+
+
+
+
 class Image {
 	public $src, $format, $image, $size;
 	public function __construct($src, $format = false, $size = false) {
@@ -358,8 +503,8 @@ class ImageConvert extends ImageBase {
 					escapeshellarg($this->temp)))) || !file_exists($this->temp)) {
 
 					if (strpos($error, "known incorrect sRGB profile") === false &&
-                                            strpos($error, "iCCP: Not recognizing known sRGB profile that has been edited") === false &&
-                                            strpos($error, "cHRM chunk does not match sRGB") === false) {
+						strpos($error, "iCCP: Not recognizing known sRGB profile that has been edited") === false &&
+						strpos($error, "cHRM chunk does not match sRGB") === false) {
 						$this->destroy();
 						error(_('Failed to resize image!')." "._('Details: ').nl2br(htmlspecialchars($error)), null, array('convert_error' => $error));
 					}
