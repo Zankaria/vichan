@@ -2,6 +2,7 @@
 namespace Vichan;
 
 use RuntimeException;
+use Vichan\Data\DnsQueries;
 use Vichan\Driver\{CacheDriver, HttpDriver, HttpDrivers, Log, LogDrivers};
 use Vichan\Data\Driver\{DnsDriver, HostDnsDriver, OsDnsDriver};
 use Vichan\Service\HCaptchaQuery;
@@ -98,6 +99,16 @@ function build_context(array $config): Context {
 			} else {
 				return new OsDnsDriver(2);
 			}
+		},
+		DnsQueries::class => function($c) {
+			$config = $c->get('config');
+			return new DnsQueries(
+				$c->get(DnsDriver::class),
+				$c->get(CacheDriver::class),
+				$config['dnsbl'],
+				$config['dnsbl_exceptions'],
+				$config['fcrdns']
+			);
 		}
 	]);
 }
