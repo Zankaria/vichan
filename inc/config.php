@@ -244,7 +244,7 @@
 	// Replacement for sectoor.de
 	$config['dnsbl'][] = array('rbl.efnetrbl.org', 4);
 
-	// http://www.sorbs.net/using.shtml
+	// https://web.archive.org/web/20140203121039/https://www.sorbs.net/using.shtml
 	// $config['dnsbl'][] = array('dnsbl.sorbs.net', array(2, 3, 4, 5, 6, 7, 8, 9));
 
 	// http://www.projecthoneypot.org/httpbl.php
