@@ -88,13 +88,6 @@
 		'file_path' => '/var/log/vichan.log',
 	];
 
-	// Use `host` via shell_exec() to lookup hostnames, avoiding query timeouts. May not work on your system.
-	// Requires safe_mode to be disabled.
-	$config['dns_system'] = false;
-
-	// Check validity of the reverse DNS of IP addresses. Highly recommended.
-	$config['fcrdns'] = true;
-
 	// When executing most command-line tools (such as `convert` for ImageMagick image processing), add this
 	// to the environment path (seperated by :).
 	$config['shell_path'] = '/usr/local/bin';
@@ -271,6 +264,13 @@
 
 	// Skip checking certain IP addresses against blacklists (for troubleshooting or whatever)
 	$config['dnsbl_exceptions'][] = '127.0.0.1';
+
+	// Use `host` via shell_exec() to lookup hostnames, avoiding query timeouts. May not work on your system.
+	// Requires safe_mode to be disabled.
+	$config['dns_system'] = false;
+
+	// Check validity of the reverse DNS of IP addresses. Highly recommended.
+	$config['fcrdns'] = true;
 
 	// To prevent bump attacks; returns the thread to last position after the last post is deleted.
 	$config['anti_bump_flood'] = false;
