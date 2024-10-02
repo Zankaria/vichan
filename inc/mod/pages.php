@@ -5,6 +5,7 @@
 use Vichan\Context;
 use Vichan\Functions\Format;
 use Vichan\Functions\Net;
+use Vichan\Data\DnsQueries;
 use Vichan\Driver\CacheDriver;
 
 defined('TINYBOARD') or exit;
@@ -883,8 +884,11 @@ function mod_ip(Context $ctx, $cip) {
 	$args['ip'] = $ip;
 	$args['posts'] = [];
 
-	if ($config['mod']['dns_lookup'] && empty($config['ipcrypt_key']))
-		$args['hostname'] = rDNS($ip);
+	if ($config['mod']['dns_lookup'] && empty($config['ipcrypt_key'])) {
+		$dns_queries = $ctx->get(DnsQueries::class);
+		$ret = $dns_queries->ipToNames($ip);
+		$args['hostname'] = $ret[0];
+	}
 
 	$boards = listBoards($ctx->get(CacheDriver::class));
 	foreach ($boards as $board) {
