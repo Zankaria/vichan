@@ -3,6 +3,7 @@ namespace Vichan;
 
 use RuntimeException;
 use Vichan\Driver\{CacheDriver, HttpDriver, HttpDrivers, Log, LogDrivers};
+use Vichan\Data\Driver\{DnsDriver, HostDnsDriver, OsDnsDriver};
 use Vichan\Service\HCaptchaQuery;
 use Vichan\Service\NativeCaptchaQuery;
 use Vichan\Service\ReCaptchaQuery;
@@ -89,6 +90,14 @@ function build_context(array $config): Context {
 		CacheDriver::class => function($c) {
 			// Use the global for backwards compatibility.
 			return \cache::getCache();
+		},
+		DnsDriver::class => function($c) {
+			$config = $c->get('config');
+			if ($config['dns_system']) {
+				return new HostDnsDriver(2);
+			} else {
+				return new OsDnsDriver(2);
+			}
 		}
 	]);
 }
